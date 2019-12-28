@@ -206,7 +206,7 @@ class StreamArchiver:
         """
 
         if not isinstance(self.current_process, subprocess.Popen):
-            return False
+            return 2
 
         start_time = time.time()
 
@@ -217,8 +217,8 @@ class StreamArchiver:
 
             if (s := self.current_process.poll()) is not None:
 
-                if s > 0:
-                    log.error(f"{self.log_name} Return code of process is {s}")
+                if s > 1:
+                    log.debug(f"{self.log_name} Return code of process is {s}")
                     return s
                 else:
                     log.info(f"{self.log_name} Stream is down/finished")
