@@ -5,11 +5,11 @@ import streamlink
 import logging
 import time
 import os
-from src import utils
+import utils
 import yaml
 import json
 
-from src.const import (
+from const import (
 
     STREAMLINK_BINARY,
     RECHECK_CHANNEL_STATUS_TIME,
@@ -327,7 +327,7 @@ if __name__ == '__main__':
     log.addHandler(LoggingSHandler())
 
     # Load the streams from config_dev.yml
-    with open(r'config.yml') as f:
+    with open(r'../config.yml') as f:
         data = yaml.load(f, Loader=yaml.FullLoader)
 
     jobs = []

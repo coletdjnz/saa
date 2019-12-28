@@ -1,5 +1,5 @@
 from datetime import datetime
-from src.const import TIME_NICE_FORMAT
+from const import TIME_NICE_FORMAT
 
 
 def get_utc_machine():
