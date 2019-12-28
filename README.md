@@ -8,6 +8,7 @@ Uses Streamlink to download the streams.
 ## Installation
 
 Requires Python 3.8+ (This is going to be designed to use in a Docker container anyways)
+
 Clone this repository:
 
     git clone https://gitlab.com/colethedj/stream_auto_archiver.git && cd stream_auto_archiver
