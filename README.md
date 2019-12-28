@@ -40,7 +40,7 @@ TwitchStream:
     - "--twitch-disable-hosting"
 ```
 
-For now the way to run this is simply
+For now, the way to run this is simply
 
     python3 stream_auto_archiver/run.py
 
