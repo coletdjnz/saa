@@ -23,7 +23,7 @@ Install Dependencies:
 
 ## Usage
  
-**Configure config.yml**
+**Configure streamers.yml**
 
 In this file is where you can configure all the streams/streamers/channels to archive. 
 The sites that are supported depends on Streamlink. 
@@ -32,13 +32,25 @@ The sites that are supported depends on Streamlink.
 
 Example:
 ```yaml
-TwitchStream:
-  url: "https://twitch.tv/channel"
-  name: "TwitchStream"
-  split_time: 3600
-  download_directory: "~/Downloads"
-  streamlink_args:
-    - "--twitch-disable-hosting"
+streamers:
+    TwitchStream:
+      url: "https://twitch.tv/channel"
+      name: "TwitchStream"
+      split_time: 3600
+      download_directory: "~/Downloads"
+      streamlink_args:
+        - "--twitch-disable-hosting"
+```
+
+**Configure config.yml**
+
+This includes general options
+
+Example:
+```yaml
+config:
+    log_level: "INFO"
+    streamlink_bin: "streamlink"
 ```
 
 For now, the way to run this is simply
