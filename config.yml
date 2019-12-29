@@ -1,13 +1,3 @@
-MyStream:
-  url: "example.com"
-  name: "MyStream"
-  split_time: 3600
-  download_directory: "~/Downloads"
-
-TwitchStream:
-  url: "https://twitch.tv/channel"
-  name: "TwitchStream"
-  split_time: 3600
-  download_directory: "~/Downloads"
-  streamlink_args:
-    - "--twitch-disable-hosting"
+config:
+  log_level: "INFO"
+  streamlink_bin: "streamlink"

@@ -11,11 +11,11 @@ import json
 
 from const import (
 
-    STREAMLINK_BINARY,
     RECHECK_CHANNEL_STATUS_TIME,
     TEMP_FILE_EXT,
     TIME_NICE_FORMAT,
-    STDOUT_READ_NEXT_LINE_TIMEOUT
+    STDOUT_READ_NEXT_LINE_TIMEOUT,
+    STREAMLINK_BINARY
 
 )
 
@@ -33,6 +33,7 @@ class StreamArchiver:
         self.streamlink_args = []
         self.stdout_data = []
         self.stdout_line_read_timeout = 0.5
+        self.streamlink_bin = STREAMLINK_BINARY
 
     @staticmethod
     def _init_download(stream, file: str, quality="best", optional_sl_args=[]):
@@ -295,13 +296,14 @@ class StreamArchiver:
 
         log.info(f"Cleaned up {total_cleaned} unfinished streams.")
 
-    def main(self, url, name, download_directory, split_time: int, streamlink_args=[]):
+    def main(self, url, name, download_directory, split_time: int, streamlink_bin=STREAMLINK_BINARY, streamlink_args=[]):
 
         self.url = url
-        self.stream_name = name
-        self.download_directory = download_directory
-        self.split_time = split_time
+        self.stream_name = name or self.stream_name
+        self.download_directory = download_directory or self.stream_name
+        self.split_time = split_time or self.stream_name
         self.streamlink_args.extend(streamlink_args)
+        self.streamlink_bin = streamlink_bin
 
         self.cleanup()
         self._display_config()

@@ -1,12 +1,15 @@
 import multiprocessing
 import logging
 import yaml
+import utils
 from archiver import StreamArchiver
 
+from const import (
 
-LOG_LEVEL = "INFO"
+    LOG_LEVEL_DEFAULT,
+    STREAMLINK_BINARY
 
-
+)
 class LoggingHandler(logging.StreamHandler):
     def __init__(self):
         logging.StreamHandler.__init__(self)
@@ -18,14 +21,22 @@ class LoggingHandler(logging.StreamHandler):
 
 if __name__ == '__main__':
 
-    log = logging.getLogger('root')
-    log.setLevel(LOG_LEVEL)
 
-    log.addHandler(LoggingHandler())
+    # Load up the config
 
     # Load the streams from config_dev.yml
     with open(r'../config.yml') as f:
-        data = yaml.load(f, Loader=yaml.FullLoader)
+        config = utils.try_get(yaml.load(f, Loader=yaml.FullLoader), lambda x: x['config']) or {}
+
+    # Configure logging
+    log = logging.getLogger('root')
+    log_level = utils.try_get(config, lambda x: x['log_level'], str) or LOG_LEVEL_DEFAULT
+    log.addHandler(LoggingHandler())
+    log.setLevel(log_level)
+
+    # Load the streams from config_dev.yml
+    with open(r'../streamers.yml') as f:
+        data = yaml.load(f, Loader=yaml.FullLoader)['streamers']
 
     jobs = []
     for st in data:
