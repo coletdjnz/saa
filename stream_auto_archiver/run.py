@@ -10,6 +10,7 @@ from const import (
     STREAMLINK_BINARY
 
 )
+
 class LoggingHandler(logging.StreamHandler):
     def __init__(self):
         logging.StreamHandler.__init__(self)
@@ -40,6 +41,10 @@ if __name__ == '__main__':
 
     jobs = []
     for st in data:
+
+        data[st]['make_dirs'] = bool(utils.try_get(src=config, getter=lambda x: x['make_dirs'], expected_type=bool)) or True
+        data[st]['streamlink_bin'] = str(
+            utils.try_get(src=config, getter=lambda x: x['streamlink_bin'], expected_type=bool)) or STREAMLINK_BINARY
 
         process = multiprocessing.Process(target=StreamArchiver().main,
                                           kwargs=data[st], name=data[st]['name'])

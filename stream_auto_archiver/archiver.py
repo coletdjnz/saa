@@ -34,6 +34,7 @@ class StreamArchiver:
         self.stdout_data = []
         self.stdout_line_read_timeout = 0.5
         self.streamlink_bin = STREAMLINK_BINARY
+        self.make_dirs = True
 
     @staticmethod
     def _init_download(stream, file: str, quality="best", optional_sl_args=[]):
@@ -296,14 +297,18 @@ class StreamArchiver:
 
         log.info(f"Cleaned up {total_cleaned} unfinished streams.")
 
-    def main(self, url, name, download_directory, split_time: int, streamlink_bin=STREAMLINK_BINARY, streamlink_args=[]):
+    def main(self, **kwargs):
 
-        self.url = url
-        self.stream_name = name or self.stream_name
-        self.download_directory = download_directory or self.stream_name
-        self.split_time = split_time or self.stream_name
-        self.streamlink_args.extend(streamlink_args)
-        self.streamlink_bin = streamlink_bin
+        self.url = kwargs.get('url')
+        self.stream_name = kwargs.get('name', self.stream_name)
+        self.download_directory = kwargs.get('download_directory', self.download_directory)
+        self.split_time = int(kwargs.get('split_time', self.split_time))
+        self.streamlink_args.extend(list(kwargs.get('steamlink_args', [])))
+        self.streamlink_bin = kwargs.get('streamlink_bin', STREAMLINK_BINARY)
+        self.make_dirs = bool(kwargs.get('make_dirs', True))
+
+        if not os.path.exists(self.download_directory) and self.make_dirs:
+            os.makedirs(self.download_directory, exist_ok=True)
 
         self.cleanup()
         self._display_config()
