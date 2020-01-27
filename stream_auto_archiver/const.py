@@ -11,7 +11,11 @@ STDOUT_READ_NEXT_LINE_TIMEOUT = 0.5
 
 LOG_LEVEL_DEFAULT = "INFO"
 
+# Stream archiver defaults
 
+STREAM_SPLIT_TIME = 3600
+STREAM_DEFAULT_NAME = "unknown_stream"
+STREAM_DEFAULT_QUALITY = "best"
 # Rclone defaults
 
 RCLONE_BIN_LOCATION = "rclone"

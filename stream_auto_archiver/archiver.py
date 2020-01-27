@@ -15,7 +15,10 @@ from const import (
     TEMP_FILE_EXT,
     TIME_NICE_FORMAT,
     STDOUT_READ_NEXT_LINE_TIMEOUT,
-    STREAMLINK_BINARY
+    STREAMLINK_BINARY,
+    STREAM_SPLIT_TIME,
+    STREAM_DEFAULT_NAME,
+    STREAM_DEFAULT_QUALITY
 
 )
 
@@ -26,18 +29,19 @@ class StreamArchiver:
 
     def __init__(self):
         self.url = ""
-        self.split_time = 3600
-        self.stream_name = "stream"
+        self.split_time = STREAM_SPLIT_TIME
+        self.stream_name = STREAM_DEFAULT_NAME
         self.download_directory = "."
-        self.current_process = None
+        self._current_process = None
         self.streamlink_args = []
-        self.stdout_data = []
-        self.stdout_line_read_timeout = 0.5
+        self._stdout_data = []
+        self.stdout_line_read_timeout = STDOUT_READ_NEXT_LINE_TIMEOUT
         self.streamlink_bin = STREAMLINK_BINARY
         self.make_dirs = True
+        self.quality = STREAM_DEFAULT_QUALITY
 
     @staticmethod
-    def _init_download(stream, file: str, quality="best", optional_sl_args=[]):
+    def _start_streamlink_process(stream_url, file: str, quality=STREAM_DEFAULT_QUALITY, optional_sl_args=None, streamlink_bin=STREAMLINK_BINARY):
         """
 
         Start Streamlink, downloading the given stream to the given file.
@@ -47,6 +51,9 @@ class StreamArchiver:
         :param quality: quality of the stream
         :return: the process object
         """
+        if optional_sl_args is None:
+            optional_sl_args = []
+
         optional_sl_args = optional_sl_args.copy()
 
         if log.level > logging.DEBUG:
@@ -55,14 +62,14 @@ class StreamArchiver:
         else:
             optional_sl_args.extend(['-l', 'debug'])
 
-        return subprocess.Popen([STREAMLINK_BINARY, stream, quality, "-o", file] + optional_sl_args, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        return subprocess.Popen([streamlink_bin, stream_url, quality, "-o", file] + optional_sl_args, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
     @staticmethod
     def _init_download_fallback():
         # Try use youtube-dl to download unsupported streams
         pass
 
-    def _check_live(self, url: str):
+    def _is_live(self):
         """
 
         Checks if there is streams available for a given url.
@@ -73,7 +80,7 @@ class StreamArchiver:
         :return: True if there is a stream, false if not
         """
         try:
-            a = subprocess.run([STREAMLINK_BINARY, url, '--json'] + self.streamlink_args, capture_output=True).stdout.decode(encoding="UTF-8")
+            a = subprocess.run([STREAMLINK_BINARY, self.url, '--json'] + self.streamlink_args, capture_output=True).stdout.decode(encoding="UTF-8")
         except subprocess.CalledProcessError:
             return False
 
@@ -101,7 +108,7 @@ class StreamArchiver:
         streams = dict(streamlink.streams(url))
         return streams
 
-    def _download_handler(self, stream, directory):
+    def _download_handler(self, stream_url):
 
         """
 
@@ -109,7 +116,6 @@ class StreamArchiver:
 
 
         :param stream:
-        :param file:
         :return:
         """
 
@@ -127,14 +133,14 @@ class StreamArchiver:
             log.info(f"Beginning Stream Download of {filename}")
 
             # Start the download process
-            self.current_process = self._init_download(stream, os.path.join(self.download_directory, filename), optional_sl_args=self.streamlink_args)
+            self._current_process = self._start_streamlink_process(stream_url, os.path.join(self.download_directory, filename), optional_sl_args=self.streamlink_args, quality=self.quality, streamlink_bin=self.streamlink_bin)
 
             # Start the stream watchdog, which will sleep and watch until we next split the stream
             status = self._stream_watchdog()
 
             if status == 0:
                 log.info(f"Cutting stream")
-                self.current_process.kill()
+                self._current_process.kill()
 
             log.info(f"Finalizing files...")
             end_time_p, end_time_m = utils.get_utc_nice(), utils.get_utc_machine()
@@ -158,7 +164,7 @@ class StreamArchiver:
                         return 2
 
     def _stdout_gen(self):
-        for line in self.current_process.stdout:
+        for line in self._current_process.stdout:
             yield line
 
     def _stdout_next(self, line):
@@ -177,7 +183,7 @@ class StreamArchiver:
         process.join(timeout=STDOUT_READ_NEXT_LINE_TIMEOUT)
         process.terminate()
 
-        self.stdout_data.extend([l.decode(encoding='UTF-8') for l in line])
+        self._stdout_data.extend([l.decode(encoding='UTF-8') for l in line])
 
     def _stream_watchdog(self):
 
@@ -197,17 +203,17 @@ class StreamArchiver:
 
         """
 
-        if not isinstance(self.current_process, subprocess.Popen):
+        if not isinstance(self._current_process, subprocess.Popen):
             return 2
 
         start_time = time.time()
 
         while (time.time() - start_time) <= self.split_time:
 
-            prev_output = len(self.stdout_data)
+            prev_output = len(self._stdout_data)
             self._timeout_read_next_stdout()
 
-            if (s := self.current_process.poll()) is not None:
+            if (s := self._current_process.poll()) is not None:
 
                 if s > 1:
                     log.debug(f"Return code of process is {s}")
@@ -216,7 +222,7 @@ class StreamArchiver:
                     log.info(f"Stream is down/finished")
                     return 1
 
-            for line in self.stdout_data[prev_output:]:
+            for line in self._stdout_data[prev_output:]:
                 # TODO: Process logs from stdout
                 if "error" not in line.lower():
                     continue
@@ -231,7 +237,7 @@ class StreamArchiver:
 
         return 0
 
-    def site_watchdog(self):
+    def _site_watchdog(self):
 
         """
 
@@ -245,7 +251,7 @@ class StreamArchiver:
         not_live_runs = 0
 
         while run:
-            stream_status = self._check_live(self.url)
+            stream_status = self._is_live()
 
             if not stream_status:
                 if not_live_runs == 0:
@@ -256,7 +262,7 @@ class StreamArchiver:
             else:
                 log.info(f"{self.stream_name} is live, archiving started.")
                 not_live_runs = 0
-                return_code = self._download_handler(self.url, self.download_directory)
+                return_code = self._download_handler(self.url)
 
             time.sleep(RECHECK_CHANNEL_STATUS_TIME)
 
@@ -299,17 +305,18 @@ class StreamArchiver:
 
     def main(self, **kwargs):
 
-        self.url = kwargs.get('url')
+        self.url = kwargs.get('url', self.url)
         self.stream_name = kwargs.get('name', self.stream_name)
         self.download_directory = kwargs.get('download_directory', self.download_directory)
         self.split_time = int(kwargs.get('split_time', self.split_time))
-        self.streamlink_args.extend(list(kwargs.get('steamlink_args', [])))
-        self.streamlink_bin = kwargs.get('streamlink_bin', STREAMLINK_BINARY)
-        self.make_dirs = bool(kwargs.get('make_dirs', True))
+        self.streamlink_args.extend(list(kwargs.get('steamlink_args', self.streamlink_args)))
+        self.streamlink_bin = kwargs.get('streamlink_bin', self.streamlink_bin)
+        self.make_dirs = bool(kwargs.get('make_dirs', self.make_dirs))
 
+        # Create download directory
         if not os.path.exists(self.download_directory) and self.make_dirs:
             os.makedirs(self.download_directory, exist_ok=True)
 
         self.cleanup()
         self._display_config()
-        self.site_watchdog()
+        self._site_watchdog()

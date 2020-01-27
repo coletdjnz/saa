@@ -26,6 +26,10 @@ from const import (
 )
 
 
+STREAMERS_FILE = os.getenv("STREAMERS_CONFIG", "streamers.yml")
+CONFIG_FILE = os.getenv("CONFIG", "config.yml")
+
+
 class Rclone:
 
     def __init__(self, binary: str, config: str):
@@ -33,28 +37,7 @@ class Rclone:
         self.CONFIG = config
         self.BASE_COMMAND = [self.BINARY] + (["--config", self.CONFIG] if self.CONFIG != ""  else []) + (['--verbose'] if log.level <= logging.DEBUG else [])
 
-    def copy_from(self, *args, **kwargs):
-        """
-
-        Run a rclone copy command using --files-from flag
-
-        rclone copy --files-from ./rcmerge/split_r2.txt ./rcmerge ./rcmerge/r2/ --verbose
-
-        """
-
-        return self.operation_from("copy", *args, **kwargs)
-
-    def move_from(self, *args, **kwargs):
-        """
-
-        Run a rclone move command using --files-from flag
-
-        rclone move --files-from ./rcmerge/split_r2.txt ./rcmerge ./rcmerge/r2/ --verbose
-
-        """
-        return self.operation_from("move", *args, **kwargs)
-
-    def operation_from(self, operation: str, files: list, dest: str, common_path: str, transfers=4, extra_args=[]):
+    def operation_from(self, operation: str, files: list, dest: str, common_path: str, extra_args=[]):
 
         print(operation, files, dest, common_path)
         operation = operation.lower()
@@ -88,7 +71,7 @@ class Rclone:
         """
         # print(command_args)
 
-        print(command_args)
+        log.debug(self.BASE_COMMAND + command_args)
         try:
             output = subprocess.run(self.BASE_COMMAND + command_args, check=True, capture_output=True)
         except subprocess.CalledProcessError as e:
@@ -104,7 +87,6 @@ class Rclone:
                               f"\nreturncode: {output.returncode}"
                               f"\nstdout: {output.stdout.decode(encoding='UTF-8')}"
                               f"\nstderr: {output.stderr.decode(encoding='UTF-8')}"
-
                               )
                 return output
 
@@ -131,7 +113,7 @@ class RcloneTrans:
         # Get a list of all the recordings in the download directory
 
         recordings_unfiltered = self._get_recordings_filtered()
-        #log.debug(recordings_unfiltered)
+
         # Transferring to remote using Rclone
         t = Rclone(binary=self.rclone_bin, config=self.rclone_config)
         t.operation_from(self.operation, files=recordings_unfiltered, dest=self.remote_dir, common_path=self.download_directory, extra_args=self.rclone_args)
@@ -139,7 +121,7 @@ class RcloneTrans:
 
 if __name__ == "__main__":
     # Load the config from config.yml
-    with open(r'config.yml') as f:
+    with open(CONFIG_FILE) as f:
         d = yaml.load(f, Loader=yaml.FullLoader)
         config_gen = utils.try_get(d, lambda x: x['config']) or {}
         config_rclone = utils.try_get(d, lambda x: x['rclone']) or {}
@@ -151,7 +133,7 @@ if __name__ == "__main__":
     log.setLevel(log_level)
 
     # Load the streams from config_dev.yml
-    with open(r'config-dev.yml') as f:
+    with open(STREAMERS_FILE) as f:
         data = yaml.load(f, Loader=yaml.FullLoader)['streamers']
 
 
