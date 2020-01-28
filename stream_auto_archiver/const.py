@@ -31,3 +31,5 @@ STREAMERS_REQUIRED_FIELDS = {
     'url': str,
 
 }
+
+DEFAULT_DOWNLOAD_DIR = "."

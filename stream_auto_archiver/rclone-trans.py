@@ -10,9 +10,7 @@ import yaml
 import utils
 import subprocess
 import tempfile
-
-from run import LoggingHandler
-
+from exceptions import RequiredValueError
 from const import (
 
     TEMP_FILE_EXT,
@@ -20,14 +18,14 @@ from const import (
     RCLONE_CONFIG_LOCATION,
     RCLONE_DEFAULT_TRANSFERS,
     RCLONE_DEFAULT_OPERATION,
-    LOG_LEVEL_DEFAULT
-
+    LOG_LEVEL_DEFAULT,
+    DEFAULT_DOWNLOAD_DIR
 
 )
 
 
-STREAMERS_FILE = os.getenv("STREAMERS_CONFIG", "streamers.yml")
-CONFIG_FILE = os.getenv("CONFIG", "config.yml")
+STREAMERS_FILE = os.getenv("STREAMERS_CONFIG", "../streamers.yml")
+CONFIG_FILE = os.getenv("CONFIG", "../config.yml")
 
 
 class Rclone:
@@ -37,7 +35,7 @@ class Rclone:
         self.CONFIG = config
         self.BASE_COMMAND = [self.BINARY] + (["--config", self.CONFIG] if self.CONFIG != ""  else []) + (['--verbose'] if log.level <= logging.DEBUG else [])
 
-    def operation_from(self, operation: str, files: list, dest: str, common_path: str, extra_args=[]):
+    def operation_from(self, operation: str, files: list, dest: str, common_path: str, extra_args=[], transfers=RCLONE_DEFAULT_TRANSFERS):
 
         print(operation, files, dest, common_path)
         operation = operation.lower()
@@ -55,7 +53,7 @@ class Rclone:
             f.close()
 
         d = self._run_command([operation, '--files-from', str(file_name),
-                                  str(common_path), str(dest)] + extra_args)
+                                  str(common_path), str(dest), '--transfers', str(transfers)] + extra_args)
 
         os.unlink(f.name)
         return d
@@ -94,19 +92,19 @@ class Rclone:
 class RcloneTrans:
 
     def __init__(self, **kwargs):
-        #log.debug(f"RcloneTrans Arguments: {kwargs}")
-        self.download_directory = kwargs.get('download_directory')
-        self.download_directory_basename = os.path.basename(self.download_directory)
 
+        self.source_dir = kwargs.get('source_dir')
+        self.source_dir_basename = os.path.basename(self.source_dir)
         self.rclone_config = kwargs.get('rclone_config', RCLONE_CONFIG_LOCATION)
         self.rclone_bin = kwargs.get('rclone_bin', RCLONE_BIN_LOCATION)
         self.remote_dir = kwargs.get('remote_dir')
         self.operation = kwargs.get('operation', RCLONE_DEFAULT_OPERATION)
         self.rclone_args = list(kwargs.get('rclone_args', []))
+        self.transfers = kwargs.get('transfers', RCLONE_DEFAULT_TRANSFERS)
         self.run()
 
     def _get_recordings_filtered(self):
-        return [a for a in os.listdir(self.download_directory) if not a.endswith(TEMP_FILE_EXT)]
+        return [a for a in os.listdir(self.source_dir) if not a.endswith(TEMP_FILE_EXT)]
 
     def run(self):
 
@@ -117,8 +115,46 @@ class RcloneTrans:
 
         # Transferring to remote using Rclone
         t = Rclone(binary=self.rclone_bin, config=self.rclone_config)
-        t.operation_from(self.operation, files=recordings_unfiltered, dest=self.remote_dir, common_path=self.download_directory, extra_args=self.rclone_args)
+        t.operation_from(self.operation, files=recordings_unfiltered, dest=self.remote_dir, common_path=self.source_dir, extra_args=self.rclone_args, transfers=self.transfers)
         log.debug("Completed Transfer")
+
+
+def create_tasks(streamers_conf: dict, rclone_conf: dict):
+
+    tasks = []
+
+    for stream in streamers_conf:
+
+        # Check if the stream has rclone arguments to start with
+
+        rclone_stream = utils.try_get(streamers_conf[stream], lambda x: x['rclone'], expected_type=dict) or None
+
+        if rclone_stream is None:
+            log.debug(f"No rclone entry for {stream}, skipping.")
+            continue
+
+        task = {}
+        task['operation'] = utils.try_get(rclone_stream, lambda x: x['operation'], expected_type=str) or utils.try_get(rclone_conf, lambda x:x['default_operation'], expected_type=str) or RCLONE_DEFAULT_OPERATION
+        task['remote_dir'] = utils.try_get(rclone_stream, lambda x: x['remote_dir'], expected_type=str) or None
+
+        if task['remote_dir'] is None:
+            raise RequiredValueError(f"[{stream}] remote_dir is a required argument")
+
+        task['rclone_args'] = utils.try_get(rclone_stream, lambda x: x['rclone_args'], expected_type=list) or []
+        task['rclone_bin'] = utils.try_get(rclone_stream, lambda x: x['rclone_bin'], expected_type=str) or utils.try_get(
+            rclone_conf, lambda x: x['rclone_bin'], expected_type=str) or RCLONE_BIN_LOCATION
+
+        task['source_dir'] = utils.try_get(streamers_conf[stream], lambda x: x['download_directory'], expected_type=str) or DEFAULT_DOWNLOAD_DIR
+
+        task['rclone_config'] = utils.try_get(rclone_stream, lambda x: x['config'], expected_type=str) or utils.try_get(
+            rclone_conf, lambda x: x['config'], expected_type=str) or RCLONE_CONFIG_LOCATION
+
+        task['transfers'] = utils.try_get(rclone_stream, lambda x: x['transfers'], expected_type=int) or utils.try_get(
+            rclone_conf, lambda x: x['transfers'], expected_type=int) or RCLONE_DEFAULT_TRANSFERS
+        tasks.append(task)
+
+    return tasks
+
 
 if __name__ == "__main__":
     # Load the config from config.yml
@@ -130,29 +166,14 @@ if __name__ == "__main__":
     # Configure logging
     log = logging.getLogger('root')
     log_level = utils.try_get(config_gen, lambda x: x['log_level'], str) or LOG_LEVEL_DEFAULT
-    log.addHandler(LoggingHandler())
+    log.addHandler(utils.LoggingHandler())
     log.setLevel(log_level)
 
     # Load the streams from config_dev.yml
     with open(STREAMERS_FILE) as f:
-        data = yaml.load(f, Loader=yaml.FullLoader)['streamers']
+        streamers = yaml.load(f, Loader=yaml.FullLoader)['streamers']
 
+    tasks = create_tasks(streamers, config_rclone)
 
-    for stream in data:
-        log.info(f"Running rclone transfer task for {data[stream]['name']}")
-        # get seperate properties for rclone out of stream rclone
-
-        rclone_stream = utils.try_get(data[stream], lambda x: x['rclone'], expected_type=dict) or {}
-
-        if rclone_stream == {}:
-            log.info("Skipping")
-            continue
-
-        operation = utils.try_get(rclone_stream, lambda x:x['operation'], expected_type=str) or utils.try_get(config_gen, lambda x:x['default_operation'], expected_type=str) or RCLONE_DEFAULT_OPERATION
-        remote_dir = utils.try_get(rclone_stream, lambda x:x['remote_dir'], expected_type=str) or utils.try_get(config_gen, lambda x:x['default_remote_dir'], expected_type=str)
-        rclone_args = utils.try_get(rclone_stream, lambda x:x['rclone_args'], expected_type=list) or []
-        if remote_dir is None:
-            log.critical(f"There is no remote/dest directory to {operation} files to. Skipping.")
-            continue
-
-        j = RcloneTrans(**{**config_gen, **config_rclone, **data[stream], **{'operation': operation, 'remote_dir': remote_dir, 'rclone_args': rclone_args}})
+    for task in tasks:
+        RcloneTrans(**task)

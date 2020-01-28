@@ -1,5 +1,15 @@
 from datetime import datetime
 from const import TIME_NICE_FORMAT
+import logging
+
+
+class LoggingHandler(logging.StreamHandler):
+    def __init__(self):
+        logging.StreamHandler.__init__(self)
+        fmt = '%(asctime)s %(filename)-18s %(levelname)-8s: [%(processName)s] %(message)s'
+        fmt_date = '%Y-%m-%d %T %Z'
+        formatter = logging.Formatter(fmt, fmt_date)
+        self.setFormatter(formatter)
 
 
 def get_utc_machine():
@@ -23,4 +33,3 @@ def try_get(src, getter, expected_type=None):
         else:
             if expected_type is None or isinstance(v, expected_type):
                 return v
-
