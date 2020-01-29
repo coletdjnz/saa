@@ -25,6 +25,8 @@ streamers:
         
         rclone_args: # if there are any extra rclone command line arguments you want
           - "--create-empty-src-dirs"
+          - "--bwlimit"
+          - "2M"
 
 
 ```
