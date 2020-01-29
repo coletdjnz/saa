@@ -7,7 +7,8 @@ import time
 import os
 import utils
 import json
-
+import sys
+import signal
 
 from const import (
 
@@ -142,7 +143,7 @@ class StreamArchiver:
                 log.info(f"Cutting stream")
                 self._current_process.kill()
 
-            log.info(f"Finalizing files...")
+            log.debug(f"Finalizing files...")
             end_time_p, end_time_m = utils.get_utc_nice(), utils.get_utc_machine()
 
             # Rename the file as a completed split
@@ -168,7 +169,7 @@ class StreamArchiver:
             yield line
 
     def _stdout_next(self, line):
-        for t in range(100):
+        for t in range(1000):
             try:
                 a = next(self._stdout_gen())
                 line.append(a)
@@ -223,6 +224,7 @@ class StreamArchiver:
                     return 1
 
             for line in self._stdout_data[prev_output:]:
+                log.debug("[STREAMLINK]: " + str(line).strip())
                 # TODO: Process logs from stdout
                 if "error" not in line.lower():
                     continue
@@ -302,7 +304,34 @@ class StreamArchiver:
 
             total_cleaned += 1
 
-        log.info(f"Cleaned up {total_cleaned} unfinished streams.")
+        log.debug(f"Cleaned up {total_cleaned} unfinished streams.")
+
+    def kill_handler(self, sig, frame):
+        """
+
+        This will kill the streamlink subprocess before killing the main process
+        Before this the streamlink process would continue even if the main process had been killed.
+
+        Here we also have to check if the current process is equal to the stream name as this gets called
+         e.g when the stdout read times out.
+
+
+        :param sig:
+        :param frame:
+        :return:
+        """
+        if multiprocessing.current_process().name == self.stream_name:
+            log.debug("Shutting down gracefully")
+
+            if self._current_process is not None:
+                if self._current_process.poll() is None:
+                    log.debug("Killing Streamlink process")
+                    self._current_process.kill()
+            log.debug("Cleaning up...")
+            self.cleanup()
+            log.debug("All finished now, exiting. Bye!")
+            sys.exit(0)
+        sys.exit(0)
 
     def main(self, **kwargs):
 
@@ -317,6 +346,10 @@ class StreamArchiver:
         # Create download directory
         if not os.path.exists(self.download_directory) and self.make_dirs:
             os.makedirs(self.download_directory, exist_ok=True)
+
+        # setup signals
+        signal.signal(signal.SIGTERM, self.kill_handler)
+        signal.signal(signal.SIGINT, self.kill_handler)
 
         self.cleanup()
         self._display_config()

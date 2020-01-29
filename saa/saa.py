@@ -2,7 +2,6 @@ import multiprocessing
 import logging
 import yaml
 import utils
-import os
 import json
 import argparse
 import rclone
@@ -58,20 +57,26 @@ def streamers_watcher(config_conf: dict, streamers_file: str):
     active = True
     current_proc = {}  # keys are the keys of streamers
     first_run = True
+    no_streams = False
     while active:
         # Load the streams
         with open(streamers_file) as f:
-            streamers = yaml.load(f, Loader=yaml.FullLoader)['streamers']
+            streamers = yaml.load(f, Loader=yaml.FullLoader)['streamers'] or {}
 
         # create the jobs
         jobs = create_jobs(config_conf, streamers)
 
         if first_run:
-            log.info("Adding streams")
+            if len(streamers) > 0:
+                log.info(f"Adding {len(streamers)} streams")
             first_run = False
 
-        # check if we have any removed streams
+        if len(streamers) == 0 and len(current_proc) == 0:
+            if not no_streams: # only want this message to be said once
+                log.info("No streams in streamers file - waiting for any to be added.")
+                no_streams = True
 
+        # check if we have any removed streams
         removed = set(current_proc.keys()) - set(jobs.keys())
 
         for remove in removed:
@@ -100,6 +105,9 @@ def streamers_watcher(config_conf: dict, streamers_file: str):
             current_proc[j] = {'process': process, 'config_hash': create_hash(j_inner)}
             process.start()
 
+            if no_streams:
+                no_streams = False
+
         sleep(15)
 
 
@@ -108,7 +116,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument("--config-file", help="path to config.yml", required=True)
     parser.add_argument("--streamers-file", help="path to streamers.yml", required=True)
-    parser.add_argument("--enable-rclone", help="enable the rclone auto upload feature", default=True, type=bool)
+    parser.add_argument("--disable-rclone", help="enable the rclone auto upload feature", action="store_true")
     args = parser.parse_args()
 
     CONFIG_FILE = args.config_file
@@ -130,7 +138,7 @@ if __name__ == '__main__':
     stream_proc = multiprocessing.Process(target=streamers_watcher, args=(config, STREAMERS_FILE), name="StreamWatcher")
     stream_proc.start()
 
-    if args.enable_rclone:
+    if not args.disable_rclone:
         rclone_delay = utils.try_get(config_rclone, lambda x: x['sleep_interval'], expected_type=int) or RCLONE_PROCESS_REPEAT_TIME
         rclone_proc = multiprocessing.Process(target=rclone.rclone_watcher, args=(config_rclone, STREAMERS_FILE, rclone_delay), name="rcloneWatcher")
         rclone_proc.start()
