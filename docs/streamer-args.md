@@ -19,9 +19,9 @@ streamers:
     # if you do not want rclone to run for this stream, remove this section
     rclone:
         remote_dir: "DemoRemote:/location/to/move/to" # required
-        operation: "move" # default is move, overwrites config.yml
-        rclone_config: /config/rclone.conf # default is ~/.config/rclone.conf, overwrites config.yml
-        transfers: 4 # rclone --transfers option, default is 4, overwrites config.yml
+        operation: "move" # default is move, overrides config.yml
+        rclone_config: /config/rclone.conf # default is ~/.config/rclone.conf, overrides config.yml
+        transfers: 4 # rclone --transfers option, default is 4, overrides config.yml
         
         rclone_args: # if there are any extra rclone command line arguments you want
           - "--create-empty-src-dirs"
