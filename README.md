@@ -34,7 +34,7 @@ Build the docker image
   
 and to run
 
-    docker run -d --name saa -v /path/to/config:/config -v - /path/to/download/location:/download --restart unless-stopped saa
+    docker run -d --name saa -v /path/to/config:/config -v /path/to/download/location:/download --restart unless-stopped saa
 
 
 
