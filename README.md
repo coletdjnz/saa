@@ -1,4 +1,4 @@
-# Stream Auto Archiver
+# Stream Auto Archiver (saa)
 
 Automatically archive livestreams.
 
@@ -84,7 +84,7 @@ and then to run (see configuration section on how to configure)
  
 **Configure streamers.yml**
 
-In this file is where you can configure all the streams/streamers/channels to archive. 
+In this file is where you can configure all the streams to archive. 
 The sites that are supported depends on Streamlink. 
 
 There are various optional arguments you can add - see docs/streamer-args.md for all possibilities 
