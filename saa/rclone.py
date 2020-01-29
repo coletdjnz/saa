@@ -104,7 +104,12 @@ class RcloneTrans:
         self.run()
 
     def _get_recordings_filtered(self):
-        return [a for a in os.listdir(self.source_dir) if not a.endswith(TEMP_FILE_EXT)]
+
+        if os.path.exists(self.source_dir):
+            return [a for a in os.listdir(self.source_dir) if not a.endswith(TEMP_FILE_EXT)]
+        else:
+            log.debug(f"{self.source_dir} does not exist (probably no stream downloaded yet) - skipping")
+            return []
 
     def run(self):
 
@@ -114,10 +119,10 @@ class RcloneTrans:
         recordings_unfiltered = self._get_recordings_filtered()
 
         # Transferring to remote using Rclone
-
-        t = Rclone(binary=self.rclone_bin, config=self.rclone_config)
-        t.operation_from(self.operation, files=recordings_unfiltered, dest=self.remote_dir, common_path=self.source_dir, extra_args=self.rclone_args, transfers=self.transfers)
-        log.debug("Completed Transfer")
+        if len(recordings_unfiltered) > 0:
+            t = Rclone(binary=self.rclone_bin, config=self.rclone_config)
+            t.operation_from(self.operation, files=recordings_unfiltered, dest=self.remote_dir, common_path=self.source_dir, extra_args=self.rclone_args, transfers=self.transfers)
+            log.debug("Completed Transfer")
 
 
 def create_tasks(streamers_conf: dict, rclone_conf: dict):
