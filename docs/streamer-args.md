@@ -24,7 +24,8 @@ streamers:
         transfers: 4 # rclone --transfers option, default is 4, overrides config.yml
         
         rclone_args: # if there are any extra rclone command line arguments you want
-          - "--create-empty-src-dirs"
+          - "--bwlimit"
+          - "2M"
 
 
 ```

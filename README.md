@@ -66,7 +66,7 @@ Requires Python 3.7+
 
 Clone this repository:
 
-    git clone https://gitlab.com/colethedj/stream_auto_archiver.git && cd stream_auto_archiver
+    git clone https://gitlab.com/colethedj/stream_auto_archiver.git && cd saa
 
 (Optional, but recommended) - Create Python virtual environment:
 
@@ -96,7 +96,7 @@ streamers:
       url: "https://twitch.tv/channel" # url to send to Streamlink
       name: "TwitchStream" 
       split_time: 3600 # rough length of each chunk in seconds
-      download_directory: "/download" # for the docker container make sure this is /download
+      download_directory: "/download/TwitchStream" # for the docker container make sure this is /download
       
       streamlink_args: # list of any extra command line arguments to send to Streamlink
         - "--twitch-disable-hosting"
