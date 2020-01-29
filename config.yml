@@ -1,8 +1,0 @@
-config:
-  log_level: "DEBUG"
-  streamlink_bin: "streamlink"
-  make_dirs: true
-rclone:
-  config: ""
-  default_operation: "move"
-  default_remote_dir: ''
