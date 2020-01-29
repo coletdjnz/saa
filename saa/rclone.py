@@ -172,7 +172,7 @@ def rclone_watcher(rclone_conf, streamers_file, sleep_time: int):
     :param sleep_time:
     :return:
     """
-    log.info(f"Running with a sleep delay of {sleep_time}")
+    log.info(f"Running with a sleep delay of {sleep_time/3600}hrs")
     while True:
         rclone_run(rclone_conf, streamers_file)
         sleep(sleep_time)

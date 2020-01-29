@@ -42,8 +42,7 @@ def create_jobs(config_conf:dict, streamers_conf: dict):
         if 'name' not in stream_job.keys():
             stream_job['name'] = stream
         stream_job['make_dirs'] = bool(utils.try_get(src=config_conf, getter=lambda x: x['make_dirs'], expected_type=bool)) or True
-        stream_job['streamlink_bin'] = str(
-            utils.try_get(src=config_conf, getter=lambda x: x['streamlink_bin'], expected_type=str)) or STREAMLINK_BINARY
+        stream_job['streamlink_bin'] = utils.try_get(src=config_conf, getter=lambda x: x['streamlink_bin'], expected_type=str) or STREAMLINK_BINARY
 
         jobs[stream] = stream_job
 
