@@ -9,7 +9,9 @@ import logging
 import yaml
 import utils
 import subprocess
+import argparse
 import tempfile
+from time import sleep
 from exceptions import RequiredValueError
 from const import (
 
@@ -23,10 +25,8 @@ from const import (
 
 )
 
-
-STREAMERS_FILE = os.getenv("STREAMERS_CONFIG", "../streamers.yml")
-CONFIG_FILE = os.getenv("CONFIG", "../config.yml")
-
+# Configure logging
+log = logging.getLogger('root')
 
 class Rclone:
 
@@ -37,7 +37,7 @@ class Rclone:
 
     def operation_from(self, operation: str, files: list, dest: str, common_path: str, extra_args=[], transfers=RCLONE_DEFAULT_TRANSFERS):
 
-        print(operation, files, dest, common_path)
+       # print(operation, files, dest, common_path)
         operation = operation.lower()
         if operation != "copy" and operation != "move":
             log.critical(f"Invalid operation! Valid operations are move and copy, not {operation}")
@@ -114,6 +114,7 @@ class RcloneTrans:
         recordings_unfiltered = self._get_recordings_filtered()
 
         # Transferring to remote using Rclone
+
         t = Rclone(binary=self.rclone_bin, config=self.rclone_config)
         t.operation_from(self.operation, files=recordings_unfiltered, dest=self.remote_dir, common_path=self.source_dir, extra_args=self.rclone_args, transfers=self.transfers)
         log.debug("Completed Transfer")
@@ -146,34 +147,65 @@ def create_tasks(streamers_conf: dict, rclone_conf: dict):
 
         task['source_dir'] = utils.try_get(streamers_conf[stream], lambda x: x['download_directory'], expected_type=str) or DEFAULT_DOWNLOAD_DIR
 
-        task['rclone_config'] = utils.try_get(rclone_stream, lambda x: x['config'], expected_type=str) or utils.try_get(
-            rclone_conf, lambda x: x['config'], expected_type=str) or RCLONE_CONFIG_LOCATION
+        task['rclone_config'] = utils.try_get(rclone_stream, lambda x: x['config'], expected_type=str) or utils.try_get(rclone_conf, lambda x: x['config'], expected_type=str) or RCLONE_CONFIG_LOCATION
 
         task['transfers'] = utils.try_get(rclone_stream, lambda x: x['transfers'], expected_type=int) or utils.try_get(
             rclone_conf, lambda x: x['transfers'], expected_type=int) or RCLONE_DEFAULT_TRANSFERS
-        tasks.append(task)
 
+        tasks.append(task)
+    log.debug(tasks)
     return tasks
+
+def rclone_watcher(rclone_conf, streamers_file, sleep_time: int):
+    """
+
+
+    Runs the rclone transfer process, then waits sleep_time to run again
+
+    :param rclone_conf:
+    :param streamers_file:
+    :param sleep_time:
+    :return:
+    """
+    log.info(f"Running with a sleep delay of {sleep_time}")
+    while True:
+        rclone_run(rclone_conf, streamers_file)
+        sleep(sleep_time)
+
+
+def rclone_run(rclone_conf, streamers_file):
+
+    # Load the streams from config_dev.yml
+    with open(streamers_file) as f:
+        streamers = yaml.load(f, Loader=yaml.FullLoader)['streamers']
+
+    tasks = create_tasks(streamers, rclone_conf)
+
+    log.info(f"Running transfer of completed files for {len(tasks)} streams.")
+    for task in tasks:
+        RcloneTrans(**task)
+    log.info(f"Completed transfers")
 
 
 if __name__ == "__main__":
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--config-file", help="path to config.yml", required=True)
+    parser.add_argument("--streamers-file", help="path to streamers.yml", required=True)
+    args = parser.parse_args()
+
+    CONFIG_FILE = args.config_file
+    STREAMERS_FILE = args.streamers_file
+
     # Load the config from config.yml
     with open(CONFIG_FILE) as f:
         d = yaml.load(f, Loader=yaml.FullLoader)
         config_gen = utils.try_get(d, lambda x: x['config']) or {}
         config_rclone = utils.try_get(d, lambda x: x['rclone']) or {}
 
-    # Configure logging
-    log = logging.getLogger('root')
     log_level = utils.try_get(config_gen, lambda x: x['log_level'], str) or LOG_LEVEL_DEFAULT
     log.addHandler(utils.LoggingHandler())
     log.setLevel(log_level)
 
-    # Load the streams from config_dev.yml
-    with open(STREAMERS_FILE) as f:
-        streamers = yaml.load(f, Loader=yaml.FullLoader)['streamers']
+    rclone_run(config_rclone, STREAMERS_FILE)
 
-    tasks = create_tasks(streamers, config_rclone)
-
-    for task in tasks:
-        RcloneTrans(**task)

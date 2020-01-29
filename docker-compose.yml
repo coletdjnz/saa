@@ -1,0 +1,10 @@
+version: "3.5"
+services:
+  saa:
+    build:
+      context: .
+    container_name: saa
+    volumes:
+     - /path/to/config:/config
+     - /path/to/download/location:/download
+    restart: unless-stopped

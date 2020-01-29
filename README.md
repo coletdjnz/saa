@@ -1,13 +1,68 @@
 # Stream Auto Archiver
-Automatically archive streams as they come online, splitting them into chunks.
+
+Automatically archive livestreams.
+
+Features:
+- Watch streams until they are live
+- Splits streams into chunks of X seconds
+- Can enable rclone to automatically pick up completed chunks and copy/move them elsewhere
+- Easy configuration of streams and config
+- Ability to add/remove/edit streams in the stream config while running
+
 
 Uses Streamlink to download the streams. 
 
-**NOTE: This is still under early development, and major changes are likely to occur.**
 
 ## Installation
 
-Requires Python 3.8+ (This is going to be designed to use in a Docker container anyways)
+### Docker (recommended)
+
+I recommended using docker as that is how I have designed this program to work, however it is possible to without.
+
+**NOTE**: In the docker image, `config.yml`, `streamers.yml` and `rclone.conf` are to be put in `/config` (see configuration section on how to configure)
+
+
+
+
+Clone this repository:
+
+    git clone https://gitlab.com/colethedj/stream_auto_archiver.git && cd saa
+    
+Build the docker image
+    
+    docker build . -t saa
+  
+and to run
+
+    docker run -d --name saa -v /path/to/config:/config -v - /path/to/download/location:/download --restart unless-stopped saa
+
+
+
+**OR you can use docker-compose**
+(see docker-compose.yml in repository)
+
+
+```yaml
+version: "3.5"
+services:
+  saa:
+    build:
+      context: .
+    container_name: saa
+    volumes:
+     - /path/to/config:/config
+     - /path/to/download/location:/download
+    restart: unless-stopped
+```
+
+and to start
+
+    docker-compose up -d
+    
+    
+### Without Docker
+
+Requires Python 3.7+ 
 
 Clone this repository:
 
@@ -21,25 +76,34 @@ Install Dependencies:
     
     pip3 install -r requirements.txt
 
-## Usage
+and then to run (see configuration section on how to configure)
+    
+    python3 saa/saa.py --config-file config/config.yml --streamers-file config/streamers.yml
+    
+## Configuration
  
 **Configure streamers.yml**
 
 In this file is where you can configure all the streams/streamers/channels to archive. 
 The sites that are supported depends on Streamlink. 
 
-(Optional) `streamlink_args` are any extra arguments you wish to pass to Streamlink.  
+There are various optional arguments you can add - see docs/streamer-args.md for all possibilities 
 
-Example:
+Simple example:
 ```yaml
 streamers:
     TwitchStream:
-      url: "https://twitch.tv/channel"
-      name: "TwitchStream"
-      split_time: 3600
-      download_directory: "~/Downloads"
-      streamlink_args:
+      url: "https://twitch.tv/channel" # url to send to Streamlink
+      name: "TwitchStream" 
+      split_time: 3600 # rough length of each chunk in seconds
+      download_directory: "/download" # for the docker container make sure this is /download
+      
+      streamlink_args: # list of any extra command line arguments to send to Streamlink
         - "--twitch-disable-hosting"
+        
+      rclone: # to enable rclone to move completed chunks for this stream (optional)
+        remote_dir: "DemoRemote:/location/to/move/to"
+    
 ```
 
 **Configure config.yml**
@@ -50,12 +114,12 @@ Example:
 ```yaml
 config:
     log_level: "INFO"
-    streamlink_bin: "streamlink"
+    
+rclone:
+  config: "/config/rclone.conf"
+  default_operation: "move"
 ```
 
-For now, the way to run this is simply
-
-    python3 stream_auto_archiver/run.py
 
 
 ## TODO

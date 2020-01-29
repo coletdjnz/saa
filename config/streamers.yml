@@ -1,0 +1,8 @@
+streamers:
+  SpaceX:
+    url: "https://www.youtube.com/user/spacexchannel/live"
+    name: "SpaceX_YT"
+    download_directory: "/download/SpaceX_YT"
+    split_time: 18000
+    rclone:
+        remote_dir: "DemoRemote:/location/to/move/to"

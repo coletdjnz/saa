@@ -212,8 +212,8 @@ class StreamArchiver:
 
             prev_output = len(self._stdout_data)
             self._timeout_read_next_stdout()
-
-            if (s := self._current_process.poll()) is not None:
+            s = self._current_process.poll()
+            if s is not None:
 
                 if s > 1:
                     log.debug(f"Return code of process is {s}")
@@ -274,6 +274,7 @@ class StreamArchiver:
                  f"URL: {self.url}\n"
                  f"Download Directory: {self.download_directory}\n"
                  f"Stream Split Length: {self.split_time}s\n"
+                 f"Quality: {self.quality}\n"
                  f"Extra Streamlink args {self.streamlink_args}"
                  f"\n----------\n"
                  "")
@@ -312,7 +313,7 @@ class StreamArchiver:
         self.streamlink_args.extend(list(kwargs.get('steamlink_args', self.streamlink_args)))
         self.streamlink_bin = kwargs.get('streamlink_bin', self.streamlink_bin)
         self.make_dirs = bool(kwargs.get('make_dirs', self.make_dirs))
-
+        self.quality = str(kwargs.get('quality', self.quality))
         # Create download directory
         if not os.path.exists(self.download_directory) and self.make_dirs:
             os.makedirs(self.download_directory, exist_ok=True)
