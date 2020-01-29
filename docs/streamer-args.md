@@ -1,4 +1,3 @@
-
 This file outlines all the possible options for streamers.yml config.
 
 Required arguments are marked with a `# required` comment.
@@ -17,6 +16,7 @@ streamers:
     streamlink_args: # any extra command line arguments you want to sent to Streamlink
      - "--twitch-disable-hosting"
     
+    # if you do not want rclone to run for this stream, remove this section
     rclone:
         remote_dir: "DemoRemote:/location/to/move/to" # required
         operation: "move" # default is move, overwrites config.yml
