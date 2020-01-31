@@ -88,11 +88,15 @@ def streamers_watcher(config_conf: dict, streamers_file: str):
 
             j_inner = jobs[j]
             if j in current_proc:
-                # TODO: here we could also check if the process is still running
                 # check if hash is different
                 if current_proc[j]['config_hash'] == create_hash(j_inner):
-                    # Skip if stream is already added and no config has changed
-                    continue
+                    # Check if the process is still running
+                    if current_proc[j]['process'].is_alive():
+                        # Skip if stream is already added and no config has changed, and is alive
+                        continue
+                    else:
+                        log.error(f'Process {j} has crashed, restarting...')
+
                 else:
                     log.info(f"{j}'s config has changed, recreating process.")
                     current_proc[j]['process'].terminate()
