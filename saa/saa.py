@@ -2,9 +2,10 @@ import multiprocessing
 import logging
 import yaml
 import utils
-import json
+import hashlib
 import argparse
 import rclone
+from copy import deepcopy
 from time import sleep
 from archiver import StreamArchiver
 from exceptions import RequiredValueError
@@ -48,8 +49,25 @@ def create_jobs(config_conf:dict, streamers_conf: dict):
     return jobs
 
 
+def flatten_dict(data: dict):
+    keys = flatten_list(list(data.keys()))
+    values = flatten_list(list(data.values()))
+    return keys + values
+
+
+def flatten_list(data: list):
+    data = deepcopy(data)
+    for index, value in enumerate(data):
+        if isinstance(value, list):
+            data[index].sort()  # future issue: doesn't count nested lists
+            data[index] = flatten_list(value)
+        if isinstance(value, dict):
+            data[index] = flatten_dict(value)
+    return "".join([str(v) for v in data])
+
+
 def create_hash(data: dict):
-    return hash(frozenset(json.dumps(data, sort_keys=True)))
+    return hashlib.md5(flatten_dict(data).encode('utf-8')).hexdigest()
 
 
 def streamers_watcher(config_conf: dict, streamers_file: str):
