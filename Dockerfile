@@ -18,7 +18,14 @@ RUN apk update && \
     cp rclone /usr/bin/ && \
     cd / && \
     rm -rf rclone-current-linux-amd64.zip && \
-    rclone --version
+    rclone --version && \
+    git clone https://github.com/streamlink/streamlink.git && \
+    git clone https://gitlab.com/colethedj/streamlink-429-patch.git && \
+    cd streamlink && \
+    git apply /streamlink-429-patch/youtube.py.patch && \
+    pip3 uninstall streamlink -y && pip3 install . && \
+    cd / && \
+    rm -rf /streamlink && rm -rf /streamlink-429-patch
 
 COPY saa /saa
 
