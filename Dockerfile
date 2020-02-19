@@ -10,6 +10,7 @@ RUN apk update && \
     ca-certificates \
     libc-dev \
     wget \
+    git \
     gcc && \
     pip3 install -r /requirements.txt -U && \
     wget https://downloads.rclone.org/rclone-current-linux-amd64.zip && \

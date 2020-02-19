@@ -339,7 +339,7 @@ class StreamArchiver:
         self.stream_name = kwargs.get('name', self.stream_name)
         self.download_directory = kwargs.get('download_directory', self.download_directory)
         self.split_time = int(kwargs.get('split_time', self.split_time))
-        self.streamlink_args.extend(list(kwargs.get('steamlink_args', self.streamlink_args)))
+        self.streamlink_args.extend(list(kwargs.get('streamlink_args', self.streamlink_args)))
         self.streamlink_bin = kwargs.get('streamlink_bin', self.streamlink_bin)
         self.make_dirs = bool(kwargs.get('make_dirs', self.make_dirs))
         self.quality = str(kwargs.get('quality', self.quality))
