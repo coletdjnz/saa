@@ -15,6 +15,7 @@ streamers:
     
     streamlink_args: # any extra command line arguments you want to sent to Streamlink
      - "--twitch-disable-hosting"
+     - "--youtube-bypass-429"
     
     # if you do not want rclone to run for this stream, remove this section
     rclone:
