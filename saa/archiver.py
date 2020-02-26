@@ -85,15 +85,24 @@ class StreamArchiver:
         except subprocess.CalledProcessError:
             return False
 
+        if a is None:
+            log.error("Got None from subprocess")
+            return False
         filtered = []
+
         for line in a.split("\n"):
             if "[plugin." not in line:
                 filtered.append(line)
+
+        if len(filtered) == 0:
+            log.error("No valid lines returned from subprocess")
+            return False
 
         try:
             json_output = json.loads('\n'.join(filtered))
         except json.JSONDecodeError as e:
             log.error(f"JSONDecodeError while trying to check if stream is live or not (probably an issue with Streamlink): {e}")
+            log.debug(a[0])
             return False
 
         if "error" not in json_output:
@@ -177,6 +186,8 @@ class StreamArchiver:
                 return
 
     def _timeout_read_next_stdout(self):
+
+        # TODO: Use threading rather than multiprocessing
         manager = multiprocessing.Manager()
         line = manager.list()
         process = multiprocessing.Process(target=self._stdout_next, args=(line,))

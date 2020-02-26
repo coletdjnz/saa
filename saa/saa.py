@@ -49,6 +49,7 @@ def create_jobs(config_conf:dict, streamers_conf: dict):
     return jobs
 
 
+# TODO: Use a more efficient method of comparing configs
 def flatten_dict(data: dict):
     keys = flatten_list(list(data.keys()))
     values = flatten_list(list(data.values()))
