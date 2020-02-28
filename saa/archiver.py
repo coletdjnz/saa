@@ -102,7 +102,7 @@ class StreamArchiver:
             json_output = json.loads('\n'.join(filtered))
         except json.JSONDecodeError as e:
             log.error(f"JSONDecodeError while trying to check if stream is live or not (probably an issue with Streamlink): {e}")
-            log.debug(a[0])
+            log.debug(f"filtered: {filtered}")
             return False
 
         if "error" not in json_output:
