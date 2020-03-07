@@ -91,11 +91,16 @@ class StreamArchiver:
         filtered = []
 
         for line in a.split("\n"):
-            if "[plugin." not in line:
-                filtered.append(line)
+            if "[plugin." in line:
+                continue
+
+            if line == "":
+                continue
+
+            filtered.append(line)
 
         if len(filtered) == 0:
-            log.error("No valid lines returned from subprocess")
+            log.warning("No valid lines returned from subprocess (issue with Streamlink?)")
             return False
 
         try:
@@ -148,6 +153,7 @@ class StreamArchiver:
             # Start the stream watchdog, which will sleep and watch until we next split the stream
             status = self._stream_watchdog()
 
+            # TODO: if _stream_watchdog has finished then we should kill the process no matter what?
             if status == 0:
                 log.info(f"Cutting stream")
                 self._current_process.kill()
@@ -160,6 +166,7 @@ class StreamArchiver:
                 os.rename(os.path.join(self.download_directory, filename), os.path.join(self.download_directory, start_time_p + "_to_" + end_time_p + "_" + self.stream_name + ".ts"))
 
             # Run some checks based on the return code
+            # TODO: use -1 error code
             if status > 0:
                 # Stream has ended
                 if status == 1:
@@ -167,11 +174,12 @@ class StreamArchiver:
                     return 1
 
                 # Stream has crashed, after 3 errors abort (TODO)
-                if status == 2:
+                if status == 2 or status == -1:
                     errors += 1
 
                     if errors > 3:
-                        return 2
+                        log.warning("Finished due to error with stream (-1)")
+                        return -1
 
     def _stdout_gen(self):
         for line in self._current_process.stdout:
@@ -216,7 +224,7 @@ class StreamArchiver:
         """
 
         if not isinstance(self._current_process, subprocess.Popen):
-            return 2
+            return -1
 
         start_time = time.time()
 
@@ -231,22 +239,24 @@ class StreamArchiver:
                     log.debug(f"Return code of process is {s}")
                     return s
                 else:
-                    log.info(f"Stream is down/finished")
+                    log.debug(f"Stream is down/finished")
                     return 1
 
             for line in self._stdout_data[prev_output:]:
-                log.debug("[STREAMLINK]: " + str(line).strip())
                 # TODO: Process logs from stdout
                 if "error" not in line.lower():
+                    log.debug("[Streamlink]: " + str(line).strip())
                     continue
 
-                if "failed to reload playlist: unable to open url" in line.lower():
+                # TODO: Streamlink will eventually quit with this error.
+                # Do we want to override this?
+                if "failed to reload playlist: unable to open url" in line.lower() or "failed to open segment" in line.lower():
                     log.debug(f"Stream has probably ended - Streamlink said: {line}")
                     break
 
-                log.error(f"{line}")
+                log.error(f"[Streamlink]:{line}")
 
-            time.sleep(self.split_time / (self.split_time / 2))
+            time.sleep(2)
 
         return 0
 
