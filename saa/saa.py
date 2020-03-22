@@ -41,6 +41,9 @@ def create_jobs(config_conf:dict, streamers_conf: dict):
 
         if 'name' not in stream_job.keys():
             stream_job['name'] = stream
+
+        if 'enabled' not in stream_job.keys():
+            stream_job['enabled'] = True
         stream_job['make_dirs'] = bool(utils.try_get(src=config_conf, getter=lambda x: x['make_dirs'], expected_type=bool)) or True
         stream_job['streamlink_bin'] = utils.try_get(src=config_conf, getter=lambda x: x['streamlink_bin'], expected_type=str) or STREAMLINK_BINARY
 
@@ -77,6 +80,7 @@ def streamers_watcher(config_conf: dict, streamers_file: str):
     current_proc = {}  # keys are the keys of streamers
     first_run = True
     no_streams = False
+    disabled_jobs = []
     while active:
         # Load the streams
         with open(streamers_file) as f:
@@ -85,25 +89,43 @@ def streamers_watcher(config_conf: dict, streamers_file: str):
         # create the jobs
         jobs = create_jobs(config_conf, streamers)
 
+        # remove any disabled streams
+        for j in jobs:
+            if jobs[j]['enabled'] is False:
+                if j not in disabled_jobs:
+                    disabled_jobs.append(j)
+                    log.info(f'{j} has been disabled.')
+            else:
+                if j in disabled_jobs:
+                    disabled_jobs.remove(j)
+                    log.info(f'{j} has been enabled.')
+
+        for disabled in disabled_jobs:
+            jobs.pop(disabled)
+
         if first_run:
-            if len(streamers) > 0:
-                log.info(f"Adding {len(streamers)} streams")
+            if len(jobs) > 0:
+                log.info(f"Adding {len(jobs)} streams")
             first_run = False
 
-        if len(streamers) == 0 and len(current_proc) == 0:
+        if len(jobs) == 0 and len(current_proc) == 0:
             if not no_streams: # only want this message to be said once
-                log.info("No streams in streamers file - waiting for any to be added.")
+                log.info("No streams (or enabled streams) in the streamers file - waiting for any to be added.")
                 no_streams = True
 
         # check if we have any removed streams
         removed = set(current_proc.keys()) - set(jobs.keys())
 
         for remove in removed:
-            log.info(f"{remove} as been removed from the config file, terminating.")
+            if remove in disabled_jobs:
+                log.info(f"{remove} has been disabled, terminating.")
+            else:
+                log.info(f"{remove} has been removed from the config file, terminating.")
             current_proc[remove]['process'].terminate()
             current_proc.pop(remove)
 
         for j in jobs:
+
 
             j_inner = jobs[j]
             if j in current_proc:
