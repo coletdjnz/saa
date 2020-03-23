@@ -14,7 +14,8 @@ from const import (
     LOG_LEVEL_DEFAULT,
     STREAMLINK_BINARY,
     STREAMERS_REQUIRED_FIELDS,
-    RCLONE_PROCESS_REPEAT_TIME
+    RCLONE_PROCESS_REPEAT_TIME,
+    STREAMERS_WATCHER_DEFAULT_SLEEP
 
 )
 
@@ -75,7 +76,18 @@ def create_hash(data: dict):
 
 
 def streamers_watcher(config_conf: dict, streamers_file: str):
+    """
+    Main process that watches the streamers config file for changes
 
+    Launches new processes for streams
+    Terminates those processes when disabled etc.
+
+    This function currently runs indefinitely.
+
+    :param config_conf: dictionary containing the contents of a config.yml file
+    :param streamers_file: path to the streamers.yml file
+    :return:
+    """
     active = True
     current_proc = {}  # keys are the keys of streamers
     first_run = True
@@ -126,7 +138,6 @@ def streamers_watcher(config_conf: dict, streamers_file: str):
 
         for j in jobs:
 
-
             j_inner = jobs[j]
             if j in current_proc:
                 # check if hash is different
@@ -153,7 +164,7 @@ def streamers_watcher(config_conf: dict, streamers_file: str):
             if no_streams:
                 no_streams = False
 
-        sleep(15)
+        sleep(STREAMERS_WATCHER_DEFAULT_SLEEP)
 
 
 if __name__ == '__main__':

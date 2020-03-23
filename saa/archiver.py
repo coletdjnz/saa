@@ -15,11 +15,12 @@ from const import (
     RECHECK_CHANNEL_STATUS_TIME,
     TEMP_FILE_EXT,
     TIME_NICE_FORMAT,
-    STDOUT_READ_NEXT_LINE_TIMEOUT,
+    STDOUT_READ_TIMEOUT,
     STREAMLINK_BINARY,
     STREAM_SPLIT_TIME,
     STREAM_DEFAULT_NAME,
-    STREAM_DEFAULT_QUALITY
+    STREAM_DEFAULT_QUALITY,
+    STREAM_WATCHDOG_DEFAULT_SLEEP
 
 )
 
@@ -36,7 +37,7 @@ class StreamArchiver:
         self._current_process = None
         self.streamlink_args = []
         self._stdout_data = []
-        self.stdout_line_read_timeout = STDOUT_READ_NEXT_LINE_TIMEOUT
+        self.stdout_line_read_timeout = STDOUT_READ_TIMEOUT
         self.streamlink_bin = STREAMLINK_BINARY
         self.make_dirs = True
         self.quality = STREAM_DEFAULT_QUALITY
@@ -200,7 +201,7 @@ class StreamArchiver:
         line = manager.list()
         process = multiprocessing.Process(target=self._stdout_next, args=(line,))
         process.start()
-        process.join(timeout=STDOUT_READ_NEXT_LINE_TIMEOUT)
+        process.join(timeout=STDOUT_READ_TIMEOUT)
         process.terminate()
 
         self._stdout_data.extend([l.decode(encoding='UTF-8') for l in line])
@@ -256,7 +257,7 @@ class StreamArchiver:
 
                 log.error(f"[Streamlink]:{line}")
 
-            time.sleep(2)
+            time.sleep(STREAM_WATCHDOG_DEFAULT_SLEEP)
 
         return 0
 
@@ -366,7 +367,14 @@ class StreamArchiver:
         self.quality = str(kwargs.get('quality', self.quality))
         # Create download directory
         if not os.path.exists(self.download_directory) and self.make_dirs:
-            os.makedirs(self.download_directory, exist_ok=True)
+            try:
+                os.makedirs(self.download_directory, exist_ok=True)
+            except (PermissionError, ) as er:
+                log.critical("Permission Error was raised while trying to create download directory. "
+                             "Please check the permissions of the location. "
+                             "Maybe try manually creating the folder? Exiting.")
+                log.debug(f"Error:: {er}")
+                sys.exit(1)
 
         # setup signals
         signal.signal(signal.SIGTERM, self.kill_handler)
