@@ -7,6 +7,7 @@ Required arguments are marked with a `# required` comment.
 
 streamers:
   SpaceX:
+    enabled: True # use this to cleanly disable archiving of streams (lets rclone cleanup all files from that stream)
     url: "https://www.youtube.com/user/spacexchannel/live" # required
     name: "SpaceX_YT"
     download_directory: "/download/SpaceX_YT" # recommended... otherwise default is current dir (.)
