@@ -28,6 +28,7 @@ from const import (
 # Configure logging
 log = logging.getLogger('root')
 
+
 class Rclone:
 
     def __init__(self, binary: str, config: str):
@@ -37,24 +38,19 @@ class Rclone:
 
     def operation_from(self, operation: str, files: list, dest: str, common_path: str, extra_args=[], transfers=RCLONE_DEFAULT_TRANSFERS):
 
-       # print(operation, files, dest, common_path)
         operation = operation.lower()
         if operation != "copy" and operation != "move":
             log.critical(f"Invalid operation! Valid operations are move and copy, not {operation}")
             return
 
-        file_name = ""
-        with tempfile.NamedTemporaryFile(mode='w', delete=False) as f:
+        with tempfile.NamedTemporaryFile(mode='w', delete=False) as fp:
             file_name = f.name
 
             for line in files:
-                f.write(f"{line}\n")
-
-            f.close()
+                fp.write(f"{line}\n")
 
         d = self._run_command([operation, '--files-from', str(file_name),
                                   str(common_path), str(dest), '--transfers', str(transfers)] + extra_args)
-
         os.unlink(f.name)
         return d
 
@@ -89,7 +85,7 @@ class Rclone:
                 return output
 
 
-class RcloneTrans:
+class RecordingsTransfer:
 
     def __init__(self, **kwargs):
 
@@ -189,7 +185,7 @@ def rclone_run(rclone_conf, streamers_file):
 
     log.info(f"Running transfer of completed files for {len(tasks)} streams.")
     for task in tasks:
-        RcloneTrans(**task)
+        RecordingsTransfer(**task)
     log.info(f"Completed transfers")
 
 

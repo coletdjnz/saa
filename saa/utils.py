@@ -1,6 +1,9 @@
 from datetime import datetime
 from const import TIME_NICE_FORMAT
 import logging
+import json
+from time import time
+import hashlib
 
 
 class LoggingHandler(logging.StreamHandler):
@@ -33,3 +36,28 @@ def try_get(src, getter, expected_type=None):
         else:
             if expected_type is None or isinstance(v, expected_type):
                 return v
+
+
+def time_test(func):
+    """
+    Decorator to time a function
+    """
+    def inner(*args, **kwargs):
+        s = time()
+        o = func(*args, **kwargs)
+        e = time()
+        print(f"{func.__name__} took {e-s}.")
+        return o
+    return inner
+
+
+def hash_dict(data: dict):
+    """
+
+    Hashes a dictionary
+
+    Note: Keys need to be strings.
+    :param data: dictionary to be hashed
+    :return: md5 hash
+    """
+    return hashlib.md5(repr(json.dumps(data, sort_keys=True, ensure_ascii=True)).encode('utf-8')).hexdigest()

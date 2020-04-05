@@ -2,10 +2,8 @@ import multiprocessing
 import logging
 import yaml
 import utils
-import hashlib
 import argparse
 import rclone
-from copy import deepcopy
 from time import sleep
 from archiver import StreamArchiver
 from exceptions import RequiredValueError
@@ -51,28 +49,6 @@ def create_jobs(config_conf:dict, streamers_conf: dict):
         jobs[stream] = stream_job
 
     return jobs
-
-
-# TODO: Use a more efficient method of comparing configs
-def flatten_dict(data: dict):
-    keys = flatten_list(list(data.keys()))
-    values = flatten_list(list(data.values()))
-    return keys + values
-
-
-def flatten_list(data: list):
-    data = deepcopy(data)
-    for index, value in enumerate(data):
-        if isinstance(value, list):
-            data[index].sort()  # future issue: doesn't count nested lists
-            data[index] = flatten_list(value)
-        if isinstance(value, dict):
-            data[index] = flatten_dict(value)
-    return "".join([str(v) for v in data])
-
-
-def create_hash(data: dict):
-    return hashlib.md5(flatten_dict(data).encode('utf-8')).hexdigest()
 
 
 def streamers_watcher(config_conf: dict, streamers_file: str):
@@ -141,7 +117,7 @@ def streamers_watcher(config_conf: dict, streamers_file: str):
             j_inner = jobs[j]
             if j in current_proc:
                 # check if hash is different
-                if current_proc[j]['config_hash'] == create_hash(j_inner):
+                if current_proc[j]['config_hash'] == utils.hash_dict(j_inner):
                     # Check if the process is still running
                     if current_proc[j]['process'].is_alive():
                         # Skip if stream is already added and no config has changed, and is alive
@@ -158,7 +134,7 @@ def streamers_watcher(config_conf: dict, streamers_file: str):
 
             # create a process
             process = multiprocessing.Process(target=StreamArchiver().main, kwargs=j_inner, name=j_inner['name'])
-            current_proc[j] = {'process': process, 'config_hash': create_hash(j_inner)}
+            current_proc[j] = {'process': process, 'config_hash': utils.hash_dict(j_inner)}
             process.start()
 
             if no_streams:
