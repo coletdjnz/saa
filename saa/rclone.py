@@ -44,14 +44,14 @@ class Rclone:
             return
 
         with tempfile.NamedTemporaryFile(mode='w', delete=False) as fp:
-            file_name = f.name
+            file_name = fp.name
 
             for line in files:
                 fp.write(f"{line}\n")
 
         d = self._run_command([operation, '--files-from', str(file_name),
                                   str(common_path), str(dest), '--transfers', str(transfers)] + extra_args)
-        os.unlink(f.name)
+        os.unlink(file_name)
         return d
 
     def _run_command(self, command_args: list):
