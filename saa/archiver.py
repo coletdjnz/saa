@@ -11,6 +11,7 @@ import sys
 from queue import Queue, Empty
 import threading
 import signal
+import traceback
 
 from const import (
 
@@ -159,6 +160,10 @@ class StreamArchiver:
             status = self._stream_watchdog()
 
             # TODO: if _stream_watchdog has finished then we should kill the process no matter what?
+            # On contray, the stream watchdog will return -1 if current_process is not a process object, i.e not running
+            # or a return code from the process (i.e the process has finished)
+            # or it will be 0, that it needs to be killed.
+
             if status == 0:
                 log.info(f"Cutting stream")
                 self._current_process.kill()
@@ -170,7 +175,7 @@ class StreamArchiver:
                     # Clear the queue
                     self._stderr_queue = None
                 said = False
-                while self._stdout_thread.is_alive() or self._stderr_thread.is_alive():
+                while utils.is_alive_safe(self._stdout_thread) or utils.is_alive_safe(self._stderr_thread):
                     if said is False:
                         log.debug("Waiting for stdout and stderr watcher threads to stop.")
                         said = True
@@ -221,6 +226,15 @@ class StreamArchiver:
                       lines=lines)
 
     def read_std(self, queue, thread, data, std, lines=10):
+        """
+        General function to handle reading from stderr/stdout etc
+        :param queue: Queue object
+        :param thread: Thread object
+        :param data: list to append lines to
+        :param std: stdout/stderr/file obj
+        :param lines: number of lines in the queue to check
+        :return: thread, queue (same as input if not changed)
+        """
         if queue is None and thread is None:
             thread, queue = self.start_std_watcher(std)
 
@@ -297,6 +311,7 @@ class StreamArchiver:
                     return 1
 
             for line in self._stderr_data:
+                # Not sure if Streamlink outputs to stderr, but just in case...
                 log.error(f"[Streamlink][stderr]: {line}")
 
             for line in self._stdout_data:
@@ -398,6 +413,7 @@ class StreamArchiver:
         :param frame:
         :return:
         """
+        log.debug(f"Received sig code {sig}, frame {frame}")
         if multiprocessing.current_process().name == self.stream_name:
             log.debug("Shutting down gracefully")
 
@@ -407,7 +423,7 @@ class StreamArchiver:
                     self._current_process.kill()
 
             said = False
-            while self._stdout_thread.is_alive() or self._stderr_thread.is_alive():
+            while utils.is_alive_safe(self._stdout_thread) or utils.is_alive_safe(self._stderr_thread):
                 if not said:
                     self._stdout_queue = None
                     self._stderr_queue = None
@@ -421,7 +437,7 @@ class StreamArchiver:
         sys.exit(0)
 
     def main(self, **kwargs):
-
+        log.info("Launching Archiver")
         self.url = kwargs.get('url', self.url)
         self.stream_name = kwargs.get('name', self.stream_name)
         self.download_directory = kwargs.get('download_directory', self.download_directory)
@@ -447,4 +463,14 @@ class StreamArchiver:
 
         self.cleanup()
         self._display_config()
-        self._site_watchdog()
+        try:
+            self._site_watchdog()
+        except Exception:
+            """
+            Catch all exception here so we can be sure we gracefully shut down and kill Streamlink process etc.
+            We'll capture the traceback here and log it for debugging purposes.
+            This only works if the error is not in the kill handler.
+            """
+            tb = traceback.format_exc()
+            log.critical(f"Stream Archiver Crashed: {tb}")
+            self.kill_handler()

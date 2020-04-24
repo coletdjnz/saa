@@ -164,13 +164,16 @@ if __name__ == '__main__':
     log_level = utils.try_get(config, lambda x: x['log_level'], str) or LOG_LEVEL_DEFAULT
     log.addHandler(utils.LoggingHandler())
     log.setLevel(log_level)
-    log.debug(config)
-    log.debug(config_rclone)
+    log.debug(f"general config: {config}")
+    log.debug(f"rclone config: {config_rclone}")
 
     stream_proc = multiprocessing.Process(target=streamers_watcher, args=(config, STREAMERS_FILE), name="StreamWatcher")
     stream_proc.start()
 
     if not args.disable_rclone:
+        # Start the rclone process
+        # I originally had the idea to run this through cron, but was easy to implement it into the script
+        # Also do we want an is_alive() checker here to restart the rclone process if it ever crashes?
         rclone_delay = utils.try_get(config_rclone, lambda x: x['sleep_interval'], expected_type=int) or RCLONE_PROCESS_REPEAT_TIME
         rclone_proc = multiprocessing.Process(target=rclone.rclone_watcher, args=(config_rclone, STREAMERS_FILE, rclone_delay), name="rcloneWatcher")
         rclone_proc.start()

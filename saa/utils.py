@@ -37,6 +37,13 @@ def try_get(src, getter, expected_type=None):
             if expected_type is None or isinstance(v, expected_type):
                 return v
 
+def is_alive_safe(proc):
+
+    try:
+        return proc.is_alive()
+    except AttributeError:
+        return False
+
 
 def time_test(func):
     """
