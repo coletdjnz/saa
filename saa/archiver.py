@@ -1,17 +1,17 @@
 from datetime import datetime
+from queue import Queue, Empty
 import multiprocessing
 import subprocess
 import streamlink
+import threading
+import traceback
 import logging
-import time
-import os
+import signal
 import utils
+import time
 import json
 import sys
-from queue import Queue, Empty
-import threading
-import signal
-import traceback
+import os
 
 from const import (
 
@@ -47,6 +47,7 @@ class StreamArchiver:
         self._stderr_queue = None
         self._stderr_thread = None
         self._stderr_data = []
+
     @staticmethod
     def _start_streamlink_process(stream_url, file: str, quality=STREAM_DEFAULT_QUALITY, optional_sl_args=None, streamlink_bin=STREAMLINK_BINARY):
         """
@@ -413,7 +414,8 @@ class StreamArchiver:
         :param frame:
         :return:
         """
-        log.debug(f"Received sig code {sig}, frame {frame}")
+        log.debug(f"Received sig code {sig}")
+        log.debug(f"Frame: {traceback.print_stack(frame)}")
         if multiprocessing.current_process().name == self.stream_name:
             log.debug("Shutting down gracefully")
 
@@ -473,4 +475,4 @@ class StreamArchiver:
             """
             tb = traceback.format_exc()
             log.critical(f"Stream Archiver Crashed: {tb}")
-            self.kill_handler()
+            self.kill_handler(1, None)
