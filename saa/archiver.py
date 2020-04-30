@@ -204,29 +204,29 @@ class StreamArchiver:
                         log.warning("Finished due to error with stream (-1)")
                         return -1
 
-    def start_std_watcher(self, std):
+    def __start_std_watcher(self, std):
         queue = Queue()
-        thread = threading.Thread(target=self.enqueue_std, args=(std, queue))
+        thread = threading.Thread(target=self.__enqueue_std, args=(std, queue))
         thread.daemon = True
         thread.start()
         return thread, queue
 
-    def read_stdout(self, lines=10):
+    def __read_stdout(self, lines=10):
 
-        self._stdout_thread, self._stdout_queue = self.read_std(queue=self._stdout_queue,
-                      thread=self._stdout_thread,
-                      data=self._stdout_data,
-                      std=self._current_process.stdout,
-                      lines=lines)
+        self._stdout_thread, self._stdout_queue = self.__read_std(queue=self._stdout_queue,
+                                                                  thread=self._stdout_thread,
+                                                                  data=self._stdout_data,
+                                                                  std=self._current_process.stdout,
+                                                                  lines=lines)
 
-    def read_stderr(self, lines=10):
-        self._stderr_thread, self._stderr_queue = self.read_std(queue=self._stderr_queue,
-                      thread=self._stderr_thread,
-                      data=self._stderr_data,
-                      std=self._current_process.stderr,
-                      lines=lines)
+    def __read_stderr(self, lines=10):
+        self._stderr_thread, self._stderr_queue = self.__read_std(queue=self._stderr_queue,
+                                                                  thread=self._stderr_thread,
+                                                                  data=self._stderr_data,
+                                                                  std=self._current_process.stderr,
+                                                                  lines=lines)
 
-    def read_std(self, queue, thread, data, std, lines=10):
+    def __read_std(self, queue, thread, data, std, lines=10):
         """
         General function to handle reading from stderr/stdout etc
         :param queue: Queue object
@@ -237,10 +237,10 @@ class StreamArchiver:
         :return: thread, queue (same as input if not changed)
         """
         if queue is None and thread is None:
-            thread, queue = self.start_std_watcher(std)
+            thread, queue = self.__start_std_watcher(std)
 
         if not thread.is_alive():
-            thread, queue = self.start_std_watcher(std)
+            thread, queue = self.__start_std_watcher(std)
 
         data.clear()
         if queue is None:
@@ -255,7 +255,7 @@ class StreamArchiver:
         return thread, queue
 
     @staticmethod
-    def enqueue_std(std, queue):
+    def __enqueue_std(std, queue):
         """
 
         Read output of stdout/stderr and add to a given queue.
@@ -299,8 +299,8 @@ class StreamArchiver:
 
         while (time.time() - start_time) <= self.split_time:
 
-            self.read_stdout(lines=10)
-            self.read_stderr(lines=10)
+            self.__read_stdout(lines=10)
+            self.__read_stderr(lines=10)
             s = self._current_process.poll()
             if s is not None:
 
@@ -415,7 +415,6 @@ class StreamArchiver:
         :return:
         """
         log.debug(f"Received sig code {sig}")
-        log.debug(f"Frame: {traceback.print_stack(frame)}")
         if multiprocessing.current_process().name == self.stream_name:
             log.debug("Shutting down gracefully")
 
