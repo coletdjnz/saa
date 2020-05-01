@@ -8,6 +8,7 @@ Features:
 - Can enable rclone to automatically pick up completed chunks and copy/move them elsewhere
 - Easy configuration of streams and config
 - Ability to add/remove/edit streams in the stream config while running
+- Error/crash recovery
 
 
 Uses Streamlink to download the streams. 
@@ -38,7 +39,7 @@ and to run
 
 
 
-**OR you can use docker-compose**
+**or you can use docker-compose**
 (see docker-compose.yml in repository)
 
 
@@ -79,7 +80,9 @@ Install Dependencies:
 and then to run (see configuration section on how to configure)
     
     python3 saa/saa.py --config-file config/config.yml --streamers-file config/streamers.yml
-    
+  
+View other command line options with `python3 saa/saa.py --help`
+
 ## Configuration
  
 **Configure streamers.yml**
@@ -87,9 +90,9 @@ and then to run (see configuration section on how to configure)
 In this file is where you can configure all the streams to archive. 
 The sites that are supported depends on Streamlink. 
 
-There are various optional arguments you can add - see docs/streamer-args.md for all possibilities 
+There are various optional arguments you can add - see [streamer-args.md](docs/streamer-args.md) for more detailed options.
 
-Simple example:
+Basic usage example:
 ```yaml
 streamers:
     TwitchStream:
@@ -124,4 +127,4 @@ rclone:
 
 ## TODO
 
-View TODO.md
+View [TODO.md](TODO.md)
