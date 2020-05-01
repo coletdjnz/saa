@@ -1,21 +1,23 @@
 from datetime import datetime
+from queue import Queue, Empty
 import multiprocessing
 import subprocess
 import streamlink
+import threading
+import traceback
 import logging
-import time
-import os
+import signal
 import utils
+import time
 import json
 import sys
-import signal
+import os
 
 from const import (
 
     RECHECK_CHANNEL_STATUS_TIME,
     TEMP_FILE_EXT,
     TIME_NICE_FORMAT,
-    STDOUT_READ_TIMEOUT,
     STREAMLINK_BINARY,
     STREAM_SPLIT_TIME,
     STREAM_DEFAULT_NAME,
@@ -36,11 +38,13 @@ class StreamArchiver:
         self.download_directory = "."
         self._current_process = None
         self.streamlink_args = []
-        self._stdout_data = []
-        self.stdout_line_read_timeout = STDOUT_READ_TIMEOUT
         self.streamlink_bin = STREAMLINK_BINARY
         self.make_dirs = True
         self.quality = STREAM_DEFAULT_QUALITY
+        self._stdout_queue = None
+        self._stdout_thread = None
+        self._stderr_queue = None
+        self._stderr_thread = None
 
     @staticmethod
     def _start_streamlink_process(stream_url, file: str, quality=STREAM_DEFAULT_QUALITY, optional_sl_args=None, streamlink_bin=STREAMLINK_BINARY):
@@ -154,10 +158,31 @@ class StreamArchiver:
             # Start the stream watchdog, which will sleep and watch until we next split the stream
             status = self._stream_watchdog()
 
-            # TODO: if _stream_watchdog has finished then we should kill the process no matter what?
             if status == 0:
                 log.info(f"Cutting stream")
-                self._current_process.kill()
+                if self._current_process.poll() is None:
+                    self._current_process.kill()
+                self._current_process = None
+                # Set both Queues to None.
+                # This should trigger the thread to stop
+                self._stderr_queue = None
+                self._stdout_queue = None
+
+                # Wait until the stdout/stderr watcher threads stop. Hopefully this should not lock up the script.
+                said_m = False
+                before_t = time.time()
+                while utils.is_alive_safe(self._stdout_thread) or utils.is_alive_safe(self._stderr_thread):
+                    if said_m is False:
+                        log.debug("Waiting for stdout and stderr watcher threads to stop.")
+                        said_m = True
+                else:
+                    log.debug(f"stdout and stderr watcher threads have stopped (took {time.time()-before_t}s).")
+            else:
+                if self._current_process.poll() is None:
+                    # If the process is still running, terminate it.
+                    # This shouldn't ever be reached.
+                    # So if it does then something has gone wrong and we should terminate it.
+                    self._current_process.terminate()
 
             log.debug(f"Finalizing files...")
             end_time_p, end_time_m = utils.get_utc_nice(), utils.get_utc_machine()
@@ -182,29 +207,83 @@ class StreamArchiver:
                         log.warning("Finished due to error with stream (-1)")
                         return -1
 
-    def _stdout_gen(self):
-        for line in self._current_process.stdout:
-            yield line
+    def __start_std_watcher(self, std):
+        queue = Queue()
+        thread = threading.Thread(target=self.__enqueue_std, args=(std, queue))
+        thread.daemon = True
+        thread.start()
+        return thread, queue
 
-    def _stdout_next(self, line):
-        for t in range(1000):
+    def _read_stdout(self, lines=10):
+        """
+        Trigger lines to be read from the standard output into a list
+
+        :param lines: number of lines to read
+        :return: list containing lines from stdout
+        """
+        data = []
+        self._stdout_thread, self._stdout_queue = self.__read_std(queue=self._stdout_queue,
+                                                                  thread=self._stdout_thread,
+                                                                  data=data,
+                                                                  std=self._current_process.stdout,
+                                                                  lines=lines)
+        return data
+
+    def _read_stderr(self, lines=10):
+        data = []
+        self._stderr_thread, self._stderr_queue = self.__read_std(queue=self._stderr_queue,
+                                                                  thread=self._stderr_thread,
+                                                                  data=data,
+                                                                  std=self._current_process.stderr,
+                                                                  lines=lines)
+        return data
+
+    def __read_std(self, queue: Queue, thread: threading.Thread, data: list, std, lines=10):
+        """
+        General function to handle reading from stderr/stdout etc
+        :param queue: Queue object
+        :param thread: Thread object
+        :param data: list to append lines to
+        :param std: stdout/stderr/file obj
+        :param lines: number of lines in the queue to check
+        :return: thread, queue (same as input if not changed)
+        """
+        if queue is None and thread is None:
+            thread, queue = self.__start_std_watcher(std)
+
+        if not thread.is_alive():
+            thread, queue = self.__start_std_watcher(std)
+
+        data.clear()
+        if queue is None:
+            return thread, queue
+        for x in range(lines):
             try:
-                a = next(self._stdout_gen())
-                line.append(a)
-            except StopIteration:
-                return
+                line = queue.get_nowait()
+                data.append(line)
+            except Empty:
+                return thread, queue
 
-    def _timeout_read_next_stdout(self):
+        return thread, queue
 
-        # TODO: Use threading rather than multiprocessing
-        manager = multiprocessing.Manager()
-        line = manager.list()
-        process = multiprocessing.Process(target=self._stdout_next, args=(line,))
-        process.start()
-        process.join(timeout=STDOUT_READ_TIMEOUT)
-        process.terminate()
+    @staticmethod
+    def __enqueue_std(std, queue):
+        """
+        Read output of stdout/stderr and add to a given queue.
 
-        self._stdout_data.extend([l.decode(encoding='UTF-8') for l in line])
+        This is to be run in another thread.
+        :param std:
+        :param queue:
+        :return:
+        """
+        try:
+            for line in iter(std.readline, b''):
+                if queue is None:
+                    return
+                queue.put(line.decode('utf-8'))
+            std.close()
+        except ValueError:  # If the file is closed
+            return
 
     def _stream_watchdog(self):
 
@@ -215,8 +294,6 @@ class StreamArchiver:
         Will run for self.split_time amount of time
 
         Relies on self.current_process
-
-        :return:
 
         0 - success, still running
         1 - Stream has finished
@@ -231,19 +308,19 @@ class StreamArchiver:
 
         while (time.time() - start_time) <= self.split_time:
 
-            prev_output = len(self._stdout_data)
-            self._timeout_read_next_stdout()
-            s = self._current_process.poll()
-            if s is not None:
+            stdout_data = self._read_stdout(lines=20)
+            stderr_data = self._read_stderr(lines=20)
 
-                if s > 1:
-                    log.debug(f"Return code of process is {s}")
-                    return s
-                else:
-                    log.debug(f"Stream is down/finished")
-                    return 1
+            current_proc_state = self._current_process.poll()
+            if current_proc_state is not None:
+                log.debug(f"Return code of process is {current_proc_state}")
+                return current_proc_state
 
-            for line in self._stdout_data[prev_output:]:
+            for line in stderr_data:
+                # Not sure if Streamlink outputs to stderr, but just in case...
+                log.error(f"[Streamlink][stderr]: {line}")
+
+            for line in stdout_data:
                 # TODO: Process logs from stdout
                 if "error" not in line.lower():
                     log.debug("[Streamlink]: " + str(line).strip())
@@ -255,7 +332,7 @@ class StreamArchiver:
                     log.debug(f"Stream has probably ended - Streamlink said: {line}")
                     break
 
-                log.error(f"[Streamlink]:{line}")
+                log.error(f"[Streamlink][stdout]:{line}")
 
             time.sleep(STREAM_WATCHDOG_DEFAULT_SLEEP)
 
@@ -342,6 +419,7 @@ class StreamArchiver:
         :param frame:
         :return:
         """
+        log.debug(f"Received sig code {sig}")
         if multiprocessing.current_process().name == self.stream_name:
             log.debug("Shutting down gracefully")
 
@@ -349,6 +427,15 @@ class StreamArchiver:
                 if self._current_process.poll() is None:
                     log.debug("Killing Streamlink process")
                     self._current_process.kill()
+
+            said = False
+            while utils.is_alive_safe(self._stdout_thread) or utils.is_alive_safe(self._stderr_thread):
+                if not said:
+                    self._stdout_queue = None
+                    self._stderr_queue = None
+                    log.debug("Waiting for stdout and stderr watcher threads to stop...")
+                    said = True
+
             log.debug("Cleaning up...")
             self.cleanup()
             log.debug("All finished now, exiting. Bye!")
@@ -356,7 +443,7 @@ class StreamArchiver:
         sys.exit(0)
 
     def main(self, **kwargs):
-
+        log.info("Launching Archiver")
         self.url = kwargs.get('url', self.url)
         self.stream_name = kwargs.get('name', self.stream_name)
         self.download_directory = kwargs.get('download_directory', self.download_directory)
@@ -382,4 +469,14 @@ class StreamArchiver:
 
         self.cleanup()
         self._display_config()
-        self._site_watchdog()
+        try:
+            self._site_watchdog()
+        except Exception:
+            """
+            Catch all exception here so we can be sure we gracefully shut down and kill Streamlink process etc.
+            We'll capture the traceback here and log it for debugging purposes.
+            This only works if the error is not in the kill handler.
+            """
+            tb = traceback.format_exc()
+            log.critical(f"Stream Archiver Crashed: {tb}")
+            self.kill_handler(1, None)
