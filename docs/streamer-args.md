@@ -6,26 +6,26 @@ Required arguments are marked with a `# required` comment.
 # streamers.yml
 
 streamers:
-  SpaceX:
-    enabled: True # use this to cleanly disable archiving of streams (lets rclone cleanup all files from that stream)
-    url: "https://www.youtube.com/user/spacexchannel/live" # required
-    name: "SpaceX_YT"
-    download_directory: "/download/SpaceX_YT" # recommended... otherwise default is current dir (.)
-    split_time: 18000 # default is 3600 (1hr), 
-    quality: "best" # Streamlink quality, default is best
+  MyYouTubeStreamer:
+    enabled: True                                              # use this to cleanly disable archiving of streams (lets rclone cleanup all files from that stream)
+    url: "https://www.youtube.com/user/MyYouTubeStreamer/live" # required
+    name: "MyYouTubeStreamer"
+    download_directory: "/download/MyYouTubeStreamer"                  # Leave this to /download for the docker image. Default is "." (current directory)
+    split_time: 18000                                          # Stream split time in seconds. Default is 3600 (1hr). To disable spliting, set this to a high value.
+    quality: "best"                                            # Streamlink quality setting, default is best.
     
-    streamlink_args: # any extra command line arguments you want to sent to Streamlink
+    streamlink_args:                                           # any extra command line arguments you want to sent to Streamlink.
      - "--twitch-disable-hosting"
      - "--youtube-bypass-429"
     
     # if you do not want rclone to run for this stream, remove this section
     rclone:
-        remote_dir: "DemoRemote:/location/to/move/to" # required
-        operation: "move" # default is move, overrides config.yml
-        rclone_config: /config/rclone.conf # default is ~/.config/rclone.conf, overrides config.yml
-        transfers: 4 # rclone --transfers option, default is 4, overrides config.yml
+        remote_dir: "DemoRemote:/location/to/move/to"          # required
+        operation: "move"                                      # default is move, overrides config.yml.
+        rclone_config: /config/rclone.conf                     # default is ~/.config/rclone.conf, overrides config.yml.
+        transfers: 4                                           # rclone --transfers option, default is 4, overrides config.yml.
         
-        rclone_args: # if there are any extra rclone command line arguments you want
+        rclone_args:                                           # any other rclone command line arguments.
           - "--bwlimit"
           - "2M"
 
