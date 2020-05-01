@@ -10,7 +10,7 @@ streamers:
     enabled: True                                              # use this to cleanly disable archiving of streams (lets rclone cleanup all files from that stream)
     url: "https://www.youtube.com/user/MyYouTubeStreamer/live" # required
     name: "MyYouTubeStreamer"
-    download_directory: "/download/MyYouTubeStreamer"                  # Leave this to /download for the docker image. Default is "." (current directory)
+    download_directory: "/download/MyYouTubeStreamer"          # Leave this to /download for the docker image. Default is "." (current directory)
     split_time: 18000                                          # Stream split time in seconds. Default is 3600 (1hr). To disable spliting, set this to a high value.
     quality: "best"                                            # Streamlink quality setting, default is best.
     
