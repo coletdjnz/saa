@@ -1,8 +1,8 @@
 streamers:
-  SpaceX:
-    url: "https://www.youtube.com/user/spacexchannel/live"
-    name: "SpaceX_YT"
-    download_directory: "/download/SpaceX_YT"
+  MyYoutubeStreamer:
+    url: "https://www.youtube.com/user/MyYoutubeStreamer/live"
+    name: "MyYoutubeStreamer"
+    download_directory: "/download/MyYoutubeStreamer"
     split_time: 18000
     rclone:
-        remote_dir: "DemoRemote:/location/to/move/to"
+        remote_dir: "DemoRemote:/MyYoutubeStreamer"
