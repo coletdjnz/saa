@@ -9,6 +9,7 @@ RUN apk update && \
     py-pip \
     ca-certificates \
     libc-dev \
+    wget \
     git \
     gcc && \
     pip3 install -r /requirements.txt -U && \
@@ -18,7 +19,14 @@ RUN apk update && \
     cp rclone /usr/bin/ && \
     cd / && \
     rm -rf rclone-current-linux-amd64.zip && \
-    rclone --version
+    rclone --version && \
+    git clone https://github.com/streamlink/streamlink.git && \
+    git clone https://gitlab.com/colethedj/streamlink-saa-patches.git && \
+    cd streamlink && \
+    for p in ../streamlink-saa-patches/patches/*.patch; do git apply --whitespace=fix --reject < $p; done && \
+    pip3 uninstall streamlink -y && pip3 install . && \
+    cd / && \
+    rm -rf /streamlink && rm -rf /streamlink-saa-patches
 
 COPY saa /saa
 

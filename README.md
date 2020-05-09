@@ -22,8 +22,9 @@ I recommended using docker as that is how I have designed this program to work, 
 
 **NOTE**: In the docker image, `config.yml`, `streamers.yml` and `rclone.conf` are to be put in `/config` (see configuration section on how to configure)
 
-
-
+There are two Dockerfiles: 
+ - [Dockerfile](Dockerfile) is the default. 
+ - [Dockerfile-slpatch](Dockerfile-slpatch) contains optional patches for Streamlink from [streamlink-saa-patches](https://gitlab.com/colethedj/streamlink-saa-patches) repository.
 
 Clone this repository:
 
@@ -49,6 +50,7 @@ services:
   saa:
     build:
       context: .
+      dockerfile: Dockerfile
     container_name: saa
     volumes:
      - /path/to/config:/config
