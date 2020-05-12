@@ -11,7 +11,7 @@ streamers:
     url: "https://www.youtube.com/user/MyYouTubeStreamer/live" # required
     name: "MyYouTubeStreamer"
     download_directory: "/download/MyYouTubeStreamer"          # Leave this to /download for the docker image. Default is "." (current directory)
-    split_time: 18000                                          # Stream split time in seconds. Default is 3600 (1hr). To disable spliting, set this to a high value.
+    split_time: 18000                                          # Stream split time in seconds. Default is 86400 (24hrs). To disable spliting, set this to a high value.
     quality: "best"                                            # Streamlink quality setting, default is best.
     
     streamlink_args:                                           # any extra command line arguments you want to sent to Streamlink.
