@@ -1,6 +1,6 @@
 # Stream Auto Archiver (saa)
 
-Automatically archive livestreams.
+Automatically archive ongoing livestreams.
 
 Features:
 - Watch streams until they are live
@@ -98,15 +98,15 @@ Basic usage example:
 ```yaml
 streamers:
     TwitchStream:
-      url: "https://twitch.tv/channel" # url to send to Streamlink
+      url: "https://twitch.tv/channel"                # url to send to Streamlink
       name: "TwitchStream" 
-      split_time: 3600 # rough length of each chunk in seconds
-      download_directory: "/download/TwitchStream" # for the docker container make sure this is /download
+      split_time: 3600                                # rough length of each chunk in seconds
+      download_directory: "/download/TwitchStream"    # for the docker container make sure this is /download
       
-      streamlink_args: # list of any extra command line arguments to send to Streamlink
+      streamlink_args:                                # list of any extra command line arguments to send to Streamlink
         - "--twitch-disable-hosting"
         
-      rclone: # to enable rclone to move completed chunks for this stream (optional)
+      rclone:                                         # to enable rclone to move completed chunks for this stream (optional)
         remote_dir: "DemoRemote:/location/to/move/to"
     
 ```
