@@ -2,7 +2,6 @@ from datetime import datetime
 from queue import Queue, Empty
 import multiprocessing
 import subprocess
-import streamlink
 import threading
 import traceback
 import logging
@@ -22,8 +21,8 @@ from const import (
     STREAM_SPLIT_TIME,
     STREAM_DEFAULT_NAME,
     STREAM_DEFAULT_QUALITY,
-    STREAM_WATCHDOG_DEFAULT_SLEEP
-
+    STREAM_WATCHDOG_DEFAULT_SLEEP,
+    NEWLINE_CHAR
 )
 
 log = logging.getLogger('root')
@@ -86,47 +85,58 @@ class StreamArchiver:
         :return: True if there is a stream, false if not
         """
         try:
-            a = subprocess.run([STREAMLINK_BINARY, self.url, '--json'] + self.streamlink_args, capture_output=True).stdout.decode(encoding="UTF-8")
+            process_ = subprocess.run([STREAMLINK_BINARY, self.url, '--json'] + self.streamlink_args, capture_output=True)
+            stderr_ = process_.stderr.decode(encoding="UTF-8")
+            stdout_ = process_.stdout.decode(encoding="UTF-8")
         except subprocess.CalledProcessError:
             return False
+        log.debug(f"Output from Streamlink: stderr={stderr_.replace(NEWLINE_CHAR, ' ')}, stdout={stdout_.replace(NEWLINE_CHAR, ' ')}")
 
-        if a is None:
-            log.error("Got None from subprocess")
+        if stderr_ is None or stdout_ is None:
+            log.critical("Got None from subprocess")
             return False
+
+        # If there is output in the stderr then Streamlink has failed (e.g invalid arguments)
+        if len(stderr_) > 0:
+            log.critical(f"Streamlink Error while checking streamer status: {stderr_.replace(NEWLINE_CHAR, ' ')}")
+            return False
+
+        # Remove any non-json lines (e.g warnings from plugins)
         filtered = []
-
-        for line in a.split("\n"):
-            if "[plugin." in line:
+        for line in stdout_.split("\n"):
+            if "[plugin." in line or line == "":
                 continue
-
-            if line == "":
-                continue
-
             filtered.append(line)
 
+        # if no data after being filtered, then not sure why there isn't any data.
         if len(filtered) == 0:
-            log.warning("No valid lines returned from subprocess (issue with Streamlink?)")
+            log.critical("No valid data returned from stderr or filtered stdout while trying to check if streamer is live"
+                        " Please report this at https://gitlab.com/colethedj/stream_auto_archiver/-/issues."
+                        "\nDebug information:"
+                        f"\nstderr: {stderr_}"
+                        f"\nstdout: {stdout_}"
+                        f"\nstdout filtered: {' '.join(filtered)}")
             return False
 
+        # parse as json
         try:
             json_output = json.loads('\n'.join(filtered))
         except json.JSONDecodeError as e:
-            log.error(f"JSONDecodeError while trying to check if stream is live or not (probably an issue with Streamlink): {e}")
-            log.debug(f"filtered: {filtered}")
+            log.critical(
+                "JSONDecodeError on filtered stdout while trying to check if streamer is live"
+                " Please report this at https://gitlab.com/colethedj/stream_auto_archiver/-/issues."
+                "\nDebug information:"
+                f"\nstderr: {stderr_}"
+                f"\nstdout: {stdout_}")
             return False
 
+        # if there is no error key in the json output, assume good.
         if "error" not in json_output:
             return True
 
         else:
             log.debug(f"Streamlink said: {json_output['error']}")
             return False
-
-    @staticmethod
-    def get_streams(url: str):
-
-        streams = dict(streamlink.streams(url))
-        return streams
 
     def _download_handler(self, stream_url):
 
