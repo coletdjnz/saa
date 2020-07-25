@@ -1,19 +1,12 @@
-"""
-
-Separate Script to be run from cron to automatically move/copy files
-
-"""
-
 import os
 import logging
 import yaml
-import utils
+import saa.utils as utils
 import subprocess
 import argparse
 import tempfile
 from time import sleep
-from exceptions import RequiredValueError
-from const import (
+from saa.const import (
 
     TEMP_FILE_EXT,
     RCLONE_BIN_LOCATION,
@@ -29,7 +22,7 @@ from const import (
 log = logging.getLogger('root')
 
 
-class Rclone:
+class RcloneWrapper:
 
     def __init__(self, binary: str, config: str):
         self.BINARY = binary
@@ -59,7 +52,6 @@ class Rclone:
 
         Run Rclone comand.
 
-
         :param command_args: List of rclone arguments, EXCLUDING the config and binary declaration
         :return: If fails, None. else the Output of command.
         """
@@ -77,11 +69,6 @@ class Rclone:
             return None
         else:
             if isinstance(output, subprocess.CompletedProcess):
-                log.debug(f"Success: "
-                              f"\nreturncode: {output.returncode}"
-                              f"\nstdout: {output.stdout.decode(encoding='UTF-8')}"
-                              f"\nstderr: {output.stderr.decode(encoding='UTF-8')}"
-                              )
                 return output
 
 
@@ -116,7 +103,7 @@ class RecordingsTransfer:
 
         # Transferring to remote using Rclone
         if len(recordings_unfiltered) > 0:
-            t = Rclone(binary=self.rclone_bin, config=self.rclone_config)
+            t = RcloneWrapper(binary=self.rclone_bin, config=self.rclone_config)
             t.operation_from(self.operation, files=recordings_unfiltered, dest=self.remote_dir, common_path=self.source_dir, extra_args=self.rclone_args, transfers=self.transfers)
             log.debug("Completed Transfer")
 
@@ -140,7 +127,7 @@ def create_tasks(streamers_conf: dict, rclone_conf: dict):
         task['remote_dir'] = utils.try_get(rclone_stream, lambda x: x['remote_dir'], expected_type=str) or None
 
         if task['remote_dir'] is None:
-            raise RequiredValueError(f"[{stream}] remote_dir is a required argument")
+            log.critical(f"[{stream}] remote_dir is a required argument. Skipping.")
 
         task['rclone_args'] = utils.try_get(rclone_stream, lambda x: x['rclone_args'], expected_type=list) or []
         task['rclone_bin'] = utils.try_get(rclone_stream, lambda x: x['rclone_bin'], expected_type=str) or utils.try_get(
@@ -171,11 +158,11 @@ def rclone_watcher(rclone_conf, streamers_file, sleep_time: int):
     """
     log.info(f"Running with a sleep delay of {sleep_time/3600}hrs")
     while True:
-        rclone_run(rclone_conf, streamers_file)
+        run_rclone(rclone_conf, streamers_file)
         sleep(sleep_time)
 
 
-def rclone_run(rclone_conf, streamers_file):
+def run_rclone(rclone_conf, streamers_file):
 
     # Load the streams from config_dev.yml
     with open(streamers_file) as f:
@@ -209,5 +196,5 @@ if __name__ == "__main__":
     log.addHandler(utils.LoggingHandler())
     log.setLevel(log_level)
 
-    rclone_run(config_rclone, STREAMERS_FILE)
+    run_rclone(config_rclone, STREAMERS_FILE)
 

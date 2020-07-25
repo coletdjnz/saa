@@ -9,12 +9,15 @@ Features:
 - Easy configuration of streams and config
 - Ability to add/remove/edit streams in the stream config while running
 - Error/crash recovery
+- Plugins to process event data from each streamer process
 
 
 Uses Streamlink to download the streams. 
 
 
 ## Installation
+
+NOTE: Only supported/tested on Linux. It might be possible to run on Windows, however there is no logging output (feel free to contribute fixes).
 
 ### Docker (recommended)
 
@@ -75,15 +78,15 @@ Clone this repository:
 
     python3 -m venv saa && source saa/bin/activate
 
-Install Dependencies:
-    
-    pip3 install -r requirements.txt
+Install SAA:
+
+    pip3 install .
 
 and then to run (see configuration section on how to configure)
     
-    python3 saa/saa.py --config-file config/config.yml --streamers-file config/streamers.yml
+    saa --config-file config/config.yml --streamers-file config/streamers.yml
   
-View other command line options with `python3 saa/saa.py --help`
+View other command line options with `saa --help`
 
 ## Configuration
  
@@ -123,10 +126,26 @@ config:
 rclone:
   config: "/config/rclone.conf"
   default_operation: "move"
+
+# optional (see docs/plugins.md for more info)
+plugins:
+    influxdb:
+      host: localhost
+      port: 8086
+      user: "foo"
+      password: "supersecretpassword"
+      dbname: "saa"
+      ssl: False
+      verify_ssl: False
 ```
 
 
 
-## TODO
+## TODO & CHANGELOG
 
 View [TODO.md](TODO.md)
+
+View [CHANGELOG.md](CHANGELOG.md)
+
+
+
