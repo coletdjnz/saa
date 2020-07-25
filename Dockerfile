@@ -1,7 +1,8 @@
 FROM alpine:latest
 MAINTAINER colethedj <colethedj@protonmail.com>
 
-COPY requirements.txt /
+COPY . /saa
+
 RUN apk update && \
     apk add ffmpeg \
     python3 \
@@ -11,18 +12,20 @@ RUN apk update && \
     libc-dev \
     git \
     gcc && \
-    pip3 install -r /requirements.txt -U && \
+    pip3 install -r /saa/requirements.txt -U && \
     wget https://downloads.rclone.org/rclone-current-linux-amd64.zip && \
     unzip rclone-current-linux-amd64.zip && \
     cd rclone-*-linux-amd64 && \
     cp rclone /usr/bin/ && \
     cd / && \
-    rm -rf rclone-current-linux-amd64.zip && \
-    rclone --version
-
-COPY saa /saa
+    rm rclone-current-linux-amd64.zip && \
+    rclone --version && \
+    cd /saa && \
+    pip3 install . && \
+    cd / && \
+    rm -rf /saa
 
 VOLUME ["/download", "/config"]
 
-CMD ["python3", "/saa/saa.py", "--config-file", "/config/config.yml", "--streamers-file", "/config/streamers.yml"]
+CMD ["saa", "--config-file", "/config/config.yml", "--streamers-file", "/config/streamers.yml"]
 

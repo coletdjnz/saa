@@ -1,9 +1,10 @@
 from datetime import datetime
-from const import TIME_NICE_FORMAT
+from saa.const import TIME_NICE_FORMAT
 import logging
 import json
 from time import time
 import hashlib
+from string import ascii_letters, digits
 
 
 class LoggingHandler(logging.StreamHandler):
@@ -37,8 +38,8 @@ def try_get(src, getter, expected_type=None):
             if expected_type is None or isinstance(v, expected_type):
                 return v
 
-def is_alive_safe(proc):
 
+def is_alive_safe(proc):
     try:
         return proc.is_alive()
     except AttributeError:
@@ -68,3 +69,9 @@ def hash_dict(data: dict):
     :return: md5 hash
     """
     return hashlib.md5(repr(json.dumps(data, sort_keys=True, ensure_ascii=True)).encode('utf-8')).hexdigest()
+
+
+def convert_to_basic_string(data:str):
+    data = data.replace(" ", "_")
+    data = data.lower()
+    return ''.join(filter(lambda s: s in ascii_letters+digits+"_", data))

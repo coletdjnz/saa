@@ -1,2 +1,0 @@
-class RequiredValueError(BaseException):
-    pass

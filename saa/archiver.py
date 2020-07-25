@@ -6,21 +6,24 @@ import threading
 import traceback
 import logging
 import signal
-import utils
+import saa.utils as utils
 import time
 import json
 import sys
 import os
 
-from const import (
+from saa.const import (
 
     RECHECK_CHANNEL_STATUS_TIME,
     TEMP_FILE_EXT,
     TIME_NICE_FORMAT,
     STREAMLINK_BINARY,
     STREAM_SPLIT_TIME,
-    STREAM_DEFAULT_NAME,
+    STREAMER_DEFAULT_NAME,
     STREAM_DEFAULT_QUALITY,
+    STREAMLINK_ARGS_DEFAULT,
+    DEFAULT_DOWNLOAD_DIR,
+    STREAMER_UPDATE_COM_STATUS_SLEEP,
     STREAM_WATCHDOG_DEFAULT_SLEEP,
     NEWLINE_CHAR
 )
@@ -30,23 +33,54 @@ log = logging.getLogger('root')
 
 class StreamArchiver:
 
-    def __init__(self):
-        self.url = ""
-        self.split_time = STREAM_SPLIT_TIME
-        self.stream_name = STREAM_DEFAULT_NAME
-        self.download_directory = "."
+    def __init__(self, url,
+                 name=STREAMER_DEFAULT_NAME,
+                 download_directory=None,
+                 split_time=STREAM_SPLIT_TIME,
+                 streamlink_args=None,
+                 streamlink_bin=STREAMLINK_BINARY,
+                 make_dirs=True,
+                 quality=STREAM_DEFAULT_QUALITY,
+                 com_queue=None, *args, **kwargs):
+
+        self.url = str(url)
+        self.split_time = int(split_time)
+        self.streamer_name = str(name)
+
+        self.streamlink_args = list(STREAMLINK_ARGS_DEFAULT)
+        if streamlink_args is None:
+            streamlink_args = []
+        self.streamlink_args.extend(streamlink_args)
+
+        if download_directory is None:
+            download_directory = os.path.join(DEFAULT_DOWNLOAD_DIR, self.streamer_name)  # TODO: Sanitize this
+        self.download_directory = str(download_directory)
+
+        self.streamlink_bin = str(streamlink_bin)
+        self.quality = str(quality)
+        self.make_dirs = bool(make_dirs)
+
         self._current_process = None
-        self.streamlink_args = []
-        self.streamlink_bin = STREAMLINK_BINARY
-        self.make_dirs = True
-        self.quality = STREAM_DEFAULT_QUALITY
-        self._stdout_queue = None
-        self._stdout_thread = None
-        self._stderr_queue = None
-        self._stderr_thread = None
+        self.__stdout_queue = None
+        self.__stdout_thread = None
+        self.__stderr_queue = None
+        self.__stderr_thread = None
+
+        # Variable to hold the start time for the stream watchdog
+        self.__chunk_start_time = 0
+        self.__split_by_time = True
+
+        # Extra Stats
+        self.__current_chunks = 0  # amount of chunks done for the current livestream (resets when stream is down)
+        self.__stream_start_time = None
+
+        # External reporting communication (for reporting plugins)
+        self.__master_reporting_queue = com_queue
+        self.__reporting_thread = None
 
     @staticmethod
-    def _start_streamlink_process(stream_url, file: str, quality=STREAM_DEFAULT_QUALITY, optional_sl_args=None, streamlink_bin=STREAMLINK_BINARY):
+    def _start_streamlink_process(stream_url, file: str, quality=STREAM_DEFAULT_QUALITY, optional_sl_args=None,
+                                  streamlink_bin=STREAMLINK_BINARY):
         """
 
         Start Streamlink, downloading the given stream to the given file.
@@ -62,17 +96,12 @@ class StreamArchiver:
         optional_sl_args = optional_sl_args.copy()
 
         if log.level > logging.DEBUG:
-
             optional_sl_args.append("--quiet")
         else:
             optional_sl_args.extend(['-l', 'debug'])
 
-        return subprocess.Popen([streamlink_bin, stream_url, quality, "-o", file] + optional_sl_args, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-
-    @staticmethod
-    def _init_download_fallback():
-        # Try use youtube-dl to download unsupported streams
-        pass
+        return subprocess.Popen([streamlink_bin, stream_url, quality, "-o", file] + optional_sl_args,
+                                stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
     def _is_live(self):
         """
@@ -85,12 +114,14 @@ class StreamArchiver:
         :return: True if there is a stream, false if not
         """
         try:
-            process_ = subprocess.run([STREAMLINK_BINARY, self.url, '--json'] + self.streamlink_args, capture_output=True)
+            process_ = subprocess.run([STREAMLINK_BINARY, self.url, '--json'] + self.streamlink_args,
+                                      capture_output=True)
             stderr_ = process_.stderr.decode(encoding="UTF-8")
             stdout_ = process_.stdout.decode(encoding="UTF-8")
         except subprocess.CalledProcessError:
             return False
-        log.debug(f"Output from Streamlink: stderr={stderr_.replace(NEWLINE_CHAR, ' ')}, stdout={stdout_.replace(NEWLINE_CHAR, ' ')}")
+        log.debug(
+            f"Output from Streamlink: stderr={stderr_.replace(NEWLINE_CHAR, ' ')}, stdout={stdout_.replace(NEWLINE_CHAR, ' ')}")
 
         if stderr_ is None or stdout_ is None:
             log.critical("Got None from subprocess")
@@ -110,12 +141,13 @@ class StreamArchiver:
 
         # if no data after being filtered, then not sure why there isn't any data.
         if len(filtered) == 0:
-            log.critical("No valid data returned from stderr or filtered stdout while trying to check if streamer is live"
-                        " Please report this at https://gitlab.com/colethedj/stream_auto_archiver/-/issues."
-                        "\nDebug information:"
-                        f"\nstderr: {stderr_}"
-                        f"\nstdout: {stdout_}"
-                        f"\nstdout filtered: {' '.join(filtered)}")
+            log.critical(
+                "No valid data returned from stderr or filtered stdout while trying to check if streamer is live"
+                " Please report this at https://gitlab.com/colethedj/stream_auto_archiver/-/issues."
+                "\nDebug information:"
+                f"\nstderr: {stderr_}"
+                f"\nstdout: {stdout_}"
+                f"\nstdout filtered: {' '.join(filtered)}")
             return False
 
         # parse as json
@@ -138,36 +170,35 @@ class StreamArchiver:
             log.debug(f"Streamlink said: {json_output['error']}")
             return False
 
-    def _download_handler(self, stream_url):
+    def _stream_download_handler(self, stream_url):
 
         """
-
         Loop that handles downloading the stream, splitting it every X amount of time
-
-
-        :param stream:
-        :return:
         """
 
         errors = 0
-
         while True:
+
             # One loop = one split
             # Get start times
             start_time_p, start_time_m = utils.get_utc_nice(), utils.get_utc_machine()
 
             # Create a filename for this loop
             # Start with identifier (in this case "D") so we can always check if download has failed
-            filename =  start_time_p + "_" + self.stream_name + ".ts" + TEMP_FILE_EXT
+            filename = start_time_p + "_" + self.streamer_name + ".ts" + TEMP_FILE_EXT
 
-            log.info(f"Beginning Stream Download of {filename}")
+            log.info(f"Starting download of stream {filename}.")
 
             # Start the download process
-            self._current_process = self._start_streamlink_process(stream_url, os.path.join(self.download_directory, filename), optional_sl_args=self.streamlink_args, quality=self.quality, streamlink_bin=self.streamlink_bin)
+            self._current_process = self._start_streamlink_process(stream_url,
+                                                                   os.path.join(self.download_directory, filename),
+                                                                   optional_sl_args=self.streamlink_args,
+                                                                   quality=self.quality,
+                                                                   streamlink_bin=self.streamlink_bin)
 
             # Start the stream watchdog, which will sleep and watch until we next split the stream
             status = self._stream_watchdog()
-
+            self.__current_chunks += 1
             if status == 0:
                 log.info(f"Cutting stream")
                 if self._current_process.poll() is None:
@@ -175,18 +206,18 @@ class StreamArchiver:
                 self._current_process = None
                 # Set both Queues to None.
                 # This should trigger the thread to stop
-                self._stderr_queue = None
-                self._stdout_queue = None
+                self.__stderr_queue = None
+                self.__stdout_queue = None
 
                 # Wait until the stdout/stderr watcher threads stop. Hopefully this should not lock up the script.
                 said_m = False
                 before_t = time.time()
-                while utils.is_alive_safe(self._stdout_thread) or utils.is_alive_safe(self._stderr_thread):
+                while utils.is_alive_safe(self.__stdout_thread) or utils.is_alive_safe(self.__stderr_thread):
                     if said_m is False:
                         log.debug("Waiting for stdout and stderr watcher threads to stop.")
                         said_m = True
                 else:
-                    log.debug(f"stdout and stderr watcher threads have stopped (took {time.time()-before_t}s).")
+                    log.debug(f"stdout and stderr watcher threads have stopped (took {time.time() - before_t}s).")
             else:
                 if self._current_process.poll() is None:
                     # If the process is still running, terminate it.
@@ -199,20 +230,18 @@ class StreamArchiver:
 
             # Rename the file as a completed split
             if os.path.exists(os.path.join(self.download_directory, filename)):
-                os.rename(os.path.join(self.download_directory, filename), os.path.join(self.download_directory, start_time_p + "_to_" + end_time_p + "_" + self.stream_name + ".ts"))
+                os.rename(os.path.join(self.download_directory, filename), os.path.join(self.download_directory,
+                                                                                        start_time_p + "_to_" + end_time_p + "_" + self.streamer_name + ".ts"))
 
             # Run some checks based on the return code
-            # TODO: use -1 error code
             if status > 0:
                 # Stream has ended
                 if status == 1:
                     log.info(f"Stream has ended.")
                     return 1
-
                 # Stream has crashed, after 3 errors abort (TODO)
                 if status == 2 or status == -1:
                     errors += 1
-
                     if errors > 3:
                         log.warning("Finished due to error with stream (-1)")
                         return -1
@@ -232,20 +261,20 @@ class StreamArchiver:
         :return: list containing lines from stdout
         """
         data = []
-        self._stdout_thread, self._stdout_queue = self.__read_std(queue=self._stdout_queue,
-                                                                  thread=self._stdout_thread,
-                                                                  data=data,
-                                                                  std=self._current_process.stdout,
-                                                                  lines=lines)
+        self.__stdout_thread, self.__stdout_queue = self.__read_std(queue=self.__stdout_queue,
+                                                                    thread=self.__stdout_thread,
+                                                                    data=data,
+                                                                    std=self._current_process.stdout,
+                                                                    lines=lines)
         return data
 
     def _read_stderr(self, lines=10):
         data = []
-        self._stderr_thread, self._stderr_queue = self.__read_std(queue=self._stderr_queue,
-                                                                  thread=self._stderr_thread,
-                                                                  data=data,
-                                                                  std=self._current_process.stderr,
-                                                                  lines=lines)
+        self.__stderr_thread, self.__stderr_queue = self.__read_std(queue=self.__stderr_queue,
+                                                                    thread=self.__stderr_thread,
+                                                                    data=data,
+                                                                    std=self._current_process.stderr,
+                                                                    lines=lines)
         return data
 
     def __read_std(self, queue: Queue, thread: threading.Thread, data: list, std, lines=10):
@@ -295,6 +324,23 @@ class StreamArchiver:
         except ValueError:  # If the file is closed
             return
 
+    def __s_wd_keep_running(self):
+        """
+
+        (I couldn't think of a better function name)
+        Helper function for self._stream_watchdog
+        Checks if the watchdog should keep running or not.
+
+        :return: True if keep running, False if stop
+        """
+
+        if self.__split_by_time:
+            return (time.time() - self.__chunk_start_time) <= self.split_time
+
+        # TODO: Add check by filesize
+
+        return False
+
     def _stream_watchdog(self):
 
         """
@@ -314,9 +360,9 @@ class StreamArchiver:
         if not isinstance(self._current_process, subprocess.Popen):
             return -1
 
-        start_time = time.time()
+        self.__chunk_start_time = time.time()
 
-        while (time.time() - start_time) <= self.split_time:
+        while self.__s_wd_keep_running():
 
             stdout_data = self._read_stdout(lines=20)
             stderr_data = self._read_stderr(lines=20)
@@ -348,17 +394,14 @@ class StreamArchiver:
 
         return 0
 
-    def _site_watchdog(self):
+    def _streamer_watchdog(self):
 
         """
 
-        Checks if stream is alive, and if so, triggers the download handler.
+        Checks if streamer is streaming, and if so, triggers the download handler.
 
-        :return:
         """
-
         run = True
-
         not_live_runs = 0
 
         while run:
@@ -366,14 +409,18 @@ class StreamArchiver:
 
             if not stream_status:
                 if not_live_runs == 0:
-                    log.info(f"{self.stream_name} is not currently live.")
+                    log.info(f"{self.streamer_name} is not currently live.")
                     not_live_runs += 1
                 else:
-                    log.debug(f"{self.stream_name} is not currently live.")
+                    log.debug(f"{self.streamer_name} is not currently live.")
             else:
-                log.info(f"{self.stream_name} is live, archiving started.")
+                log.info(f"{self.streamer_name} is live, archiving started.")
                 not_live_runs = 0
-                return_code = self._download_handler(self.url)
+                self.__current_chunks = 0
+                self.__stream_start_time = time.time()
+                return_code = self._stream_download_handler(self.url)
+                self.__current_chunks = 0
+                self.__stream_start_time = None
 
             time.sleep(RECHECK_CHANNEL_STATUS_TIME)
 
@@ -381,11 +428,12 @@ class StreamArchiver:
 
         log.info(f"\n----------\n"
                  f"Configuration:\n"
-                 f"Stream Name: {self.stream_name}\n"
+                 f"Stream Name: {self.streamer_name}\n"
                  f"URL: {self.url}\n"
                  f"Download Directory: {self.download_directory}\n"
                  f"Stream Split Length: {self.split_time}s\n"
                  f"Quality: {self.quality}\n"
+                 f"Make Directories: {self.make_dirs}\n"
                  f"Extra Streamlink args {self.streamlink_args}"
                  f"\n----------\n"
                  "")
@@ -399,38 +447,26 @@ class StreamArchiver:
         for file in os.listdir(self.download_directory):
             if not file.endswith(TEMP_FILE_EXT):
                 continue
-
-            if file[16:-len(".ts" + TEMP_FILE_EXT)].lower() != self.stream_name.lower():
+            if file[16:-len(".ts" + TEMP_FILE_EXT)].lower() != self.streamer_name.lower():
                 continue
-
-            last_mod = datetime.utcfromtimestamp(os.path.getmtime(os.path.join(self.download_directory, file))).strftime(TIME_NICE_FORMAT)
-
+            last_mod = datetime.utcfromtimestamp(
+                os.path.getmtime(os.path.join(self.download_directory, file))).strftime(TIME_NICE_FORMAT)
             # Assuming filename is in the format <start_time>_<stream_name>.<ext>.<TEMP_FILE_EXT>
-
             new_name = file[:15] + "_to_" + last_mod + "_" + file[16:-len(".ts" + TEMP_FILE_EXT)] + ".ts"
-
             os.rename(os.path.join(self.download_directory, file), os.path.join(self.download_directory, new_name))
-
             total_cleaned += 1
-
         log.debug(f"Cleaned up {total_cleaned} unfinished streams.")
 
     def kill_handler(self, sig, frame):
         """
-
         This will kill the streamlink subprocess before killing the main process
         Before this the streamlink process would continue even if the main process had been killed.
 
         Here we also have to check if the current process is equal to the stream name as this gets called
          e.g when the stdout read times out.
-
-
-        :param sig:
-        :param frame:
-        :return:
         """
         log.debug(f"Received sig code {sig}")
-        if multiprocessing.current_process().name == self.stream_name:
+        if multiprocessing.current_process().name == self.streamer_name:
             log.debug("Shutting down gracefully")
 
             if self._current_process is not None:
@@ -439,10 +475,10 @@ class StreamArchiver:
                     self._current_process.kill()
 
             said = False
-            while utils.is_alive_safe(self._stdout_thread) or utils.is_alive_safe(self._stderr_thread):
+            while utils.is_alive_safe(self.__stdout_thread) or utils.is_alive_safe(self.__stderr_thread):
                 if not said:
-                    self._stdout_queue = None
-                    self._stderr_queue = None
+                    self.__stdout_queue = None
+                    self.__stderr_queue = None
                     log.debug("Waiting for stdout and stderr watcher threads to stop...")
                     said = True
 
@@ -452,24 +488,63 @@ class StreamArchiver:
             sys.exit(0)
         sys.exit(0)
 
-    def main(self, **kwargs):
+    def set_reporting_queue(self, queue: multiprocessing.Queue):
+        self.__master_reporting_queue = queue
+
+    def __start_ext_com_thread(self):
+        if self.__master_reporting_queue is not None:
+            self.__reporting_thread = threading.Thread(target=self.__enqueue_communicate)
+            self.__reporting_thread.daemon = True
+            self.__reporting_thread.start()
+            return True
+        return False
+
+    def __enqueue_communicate(self):
+        """
+        Separate thread that pushes information about the streamer state to the master reporting queue.
+        """
+        while True:
+            payload = {'streamer': self.streamer_name,
+                       'pid': multiprocessing.current_process().pid,
+                       'time_utc': int(datetime.now().strftime('%s')),
+                       "is_live": False,
+                       }
+            if self._current_process is not None:
+                if self._current_process.poll() is None:
+                    try:
+                        chunk_time_elapsed = time.time() - self.__chunk_start_time
+                    except TypeError:
+                        chunk_time_elapsed = 0
+                    try:
+                        stream_time_elapsed = time.time() - self.__stream_start_time
+                    except TypeError:
+                        stream_time_elapsed = 0
+
+                    payload = {**payload, **{"is_live": True,
+                                             "chunk_time_elapsed": chunk_time_elapsed,
+                                             'streamlink_pid': self._current_process.pid,
+                                             'stream_time_elapsed': stream_time_elapsed,
+                                             'chunks': self.__current_chunks}}
+            self.__master_reporting_queue.put(payload)
+            time.sleep(STREAMER_UPDATE_COM_STATUS_SLEEP)
+
+    def run(self):
+        """
+        Main entry function to start the archiver
+        """
         log.info("Launching Archiver")
-        self.url = kwargs.get('url', self.url)
-        self.stream_name = kwargs.get('name', self.stream_name)
-        self.download_directory = kwargs.get('download_directory', self.download_directory)
-        self.split_time = int(kwargs.get('split_time', self.split_time))
-        self.streamlink_args.extend(list(kwargs.get('streamlink_args', self.streamlink_args)))
-        self.streamlink_bin = kwargs.get('streamlink_bin', self.streamlink_bin)
-        self.make_dirs = bool(kwargs.get('make_dirs', self.make_dirs))
-        self.quality = str(kwargs.get('quality', self.quality))
         # Create download directory
         if not os.path.exists(self.download_directory) and self.make_dirs:
             try:
                 os.makedirs(self.download_directory, exist_ok=True)
-            except (PermissionError, ) as er:
+            except (PermissionError,) as er:
                 log.critical("Permission Error was raised while trying to create download directory. "
                              "Please check the permissions of the location. "
                              "Maybe try manually creating the folder? Exiting.")
+                log.debug(f"Error:: {er}")
+                sys.exit(1)
+            except OSError as er:
+                log.critical("OS Error was raised while trying to create download directory. ")
                 log.debug(f"Error:: {er}")
                 sys.exit(1)
 
@@ -480,7 +555,12 @@ class StreamArchiver:
         self.cleanup()
         self._display_config()
         try:
-            self._site_watchdog()
+            sqs = self.__start_ext_com_thread()
+            if sqs:
+                log.debug("Started external reporting thread")
+            else:
+                log.debug("No master reporting queue present, not starting external reporting thread.")
+            self._streamer_watchdog()
         except Exception:
             """
             Catch all exception here so we can be sure we gracefully shut down and kill Streamlink process etc.
@@ -490,3 +570,10 @@ class StreamArchiver:
             tb = traceback.format_exc()
             log.critical(f"Stream Archiver Crashed: {tb}")
             self.kill_handler(1, None)
+
+
+def worker(master_reporting_queue=None, *args, **kwargs):
+    a = StreamArchiver(*args, **kwargs)
+    if master_reporting_queue is not None:
+        a.set_reporting_queue(master_reporting_queue)
+    a.run()

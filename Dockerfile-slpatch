@@ -1,7 +1,7 @@
 FROM alpine:latest
 MAINTAINER colethedj <colethedj@protonmail.com>
 
-COPY requirements.txt /
+COPY . /saa
 RUN apk update && \
     apk add ffmpeg \
     python3 \
@@ -12,13 +12,13 @@ RUN apk update && \
     wget \
     git \
     gcc && \
-    pip3 install -r /requirements.txt -U && \
+    pip3 install -r /saa/requirements.txt -U && \
     wget https://downloads.rclone.org/rclone-current-linux-amd64.zip && \
     unzip rclone-current-linux-amd64.zip && \
     cd rclone-*-linux-amd64 && \
     cp rclone /usr/bin/ && \
     cd / && \
-    rm -rf rclone-current-linux-amd64.zip && \
+    rm rclone-current-linux-amd64.zip && \
     rclone --version && \
     git clone https://github.com/streamlink/streamlink.git && \
     git clone https://gitlab.com/colethedj/streamlink-saa-patches.git && \
@@ -26,11 +26,15 @@ RUN apk update && \
     for p in ../streamlink-saa-patches/patches/*.patch; do git apply --whitespace=fix --reject < $p; done && \
     pip3 uninstall streamlink -y && pip3 install . && \
     cd / && \
-    rm -rf /streamlink && rm -rf /streamlink-saa-patches
+    rm -rf /streamlink && rm -rf /streamlink-saa-patches && \
+    cd /saa && \
+    pip3 install . && \
+    cd / && \
+    rm -rf /saa
 
 COPY saa /saa
 
 VOLUME ["/download", "/config"]
 
-CMD ["python3", "/saa/saa.py", "--config-file", "/config/config.yml", "--streamers-file", "/config/streamers.yml"]
+CMD ["saa", "--config-file", "/config/config.yml", "--streamers-file", "/config/streamers.yml"]
 

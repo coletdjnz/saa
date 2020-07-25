@@ -1,13 +1,13 @@
 import multiprocessing
 import logging
 import yaml
-import utils
+import saa.utils as utils
 import argparse
-import rclone
+import saa.rclone as rclone
 from time import sleep
-from archiver import StreamArchiver
-from exceptions import RequiredValueError
-from const import (
+from saa.plugins.pluginhandler import launch_reporting_plugins
+import saa.archiver as archiver
+from saa.const import (
 
     LOG_LEVEL_DEFAULT,
     STREAMLINK_BINARY,
@@ -18,7 +18,7 @@ from const import (
 )
 
 
-def create_jobs(config_conf:dict, streamers_conf: dict):
+def create_jobs(config_conf: dict, streamers_conf: dict):
     """
 
     Parses the configs to create a dict that can be sent to archiver.py, and jobs
@@ -26,32 +26,40 @@ def create_jobs(config_conf:dict, streamers_conf: dict):
     """
     jobs = {}
     for stream in streamers_conf:
+        skip = False
         # create a copy, we are just editing a few values
         stream_job = streamers_conf[stream].copy()
 
         # check required fields
-
         for r in STREAMERS_REQUIRED_FIELDS:
             if r not in stream_job.keys():
-                raise RequiredValueError(f"[{stream}] {r} is a required value.")
+                log.critical(f"[{stream}] {r} is a required value. Skipping job builder for this streamer..")
+                skip = True
+                break
             else:
                 if not isinstance(stream_job[r], STREAMERS_REQUIRED_FIELDS[r]):
-                    raise TypeError(f"[{stream}] {r} needs to be a {STREAMERS_REQUIRED_FIELDS[r].__name__}, currently it is {type(stream_job[r]).__name__}.")
-
+                    log.critical((f"[{stream}] {r} needs to be a {STREAMERS_REQUIRED_FIELDS[r].__name__},"
+                                  f" currently it is {type(stream_job[r]).__name__}."
+                                  f" Skipping job builder for this streamer."))
+                    skip = True
+                    break
         if 'name' not in stream_job.keys():
             stream_job['name'] = stream
 
         if 'enabled' not in stream_job.keys():
             stream_job['enabled'] = True
-        stream_job['make_dirs'] = bool(utils.try_get(src=config_conf, getter=lambda x: x['make_dirs'], expected_type=bool)) or True
-        stream_job['streamlink_bin'] = utils.try_get(src=config_conf, getter=lambda x: x['streamlink_bin'], expected_type=str) or STREAMLINK_BINARY
+        stream_job['make_dirs'] = bool(
+            utils.try_get(src=config_conf, getter=lambda x: x['make_dirs'], expected_type=bool)) or True
+        stream_job['streamlink_bin'] = utils.try_get(src=config_conf, getter=lambda x: x['streamlink_bin'],
+                                                     expected_type=str) or STREAMLINK_BINARY
 
-        jobs[stream] = stream_job
+        if not skip:
+            jobs[stream] = stream_job
 
     return jobs
 
 
-def streamers_watcher(config_conf: dict, streamers_file: str):
+def streamers_watcher(config_conf: dict, streamers_file: str, plugin_configs: dict):
     """
     Main process that watches the streamers config file for changes
 
@@ -69,7 +77,17 @@ def streamers_watcher(config_conf: dict, streamers_file: str):
     first_run = True
     no_streams = False
     disabled_jobs = []
+
+    # Launch any plugins, if enabled.
+    if plugin_configs != {}:
+        master_reporting_queue = multiprocessing.Queue()
+        launch_reporting_plugins(master_reporting_queue, plugin_configs)
+    else:
+        master_reporting_queue = None
+        log.debug("No plugins enabled.")
+
     while active:
+
         # Load the streams
         with open(streamers_file) as f:
             streamers = yaml.load(f, Loader=yaml.FullLoader)['streamers'] or {}
@@ -97,7 +115,7 @@ def streamers_watcher(config_conf: dict, streamers_file: str):
             first_run = False
 
         if len(jobs) == 0 and len(current_proc) == 0:
-            if not no_streams: # only want this message to be said once
+            if not no_streams:  # only want this message to be said once
                 log.info("No streams (or enabled streams) in the streamers file - waiting for any to be added.")
                 no_streams = True
 
@@ -133,7 +151,8 @@ def streamers_watcher(config_conf: dict, streamers_file: str):
                     log.info(f"Adding new stream: {j_inner['name']}")
 
             # create a process
-            process = multiprocessing.Process(target=StreamArchiver().main, kwargs=j_inner, name=j_inner['name'])
+            process = multiprocessing.Process(target=archiver.worker, args=(master_reporting_queue,), kwargs=j_inner,
+                                              name=j_inner['name'])
             current_proc[j] = {'process': process, 'config_hash': utils.hash_dict(j_inner)}
             process.start()
 
@@ -143,14 +162,12 @@ def streamers_watcher(config_conf: dict, streamers_file: str):
         sleep(STREAMERS_WATCHER_DEFAULT_SLEEP)
 
 
-if __name__ == '__main__':
-
+def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--config-file", help="path to config.yml", required=True)
     parser.add_argument("--streamers-file", help="path to streamers.yml", required=True)
     parser.add_argument("--disable-rclone", help="enable the rclone auto upload feature", action="store_true")
     args = parser.parse_args()
-
     CONFIG_FILE = args.config_file
     STREAMERS_FILE = args.streamers_file
 
@@ -159,7 +176,10 @@ if __name__ == '__main__':
         d = yaml.load(f, Loader=yaml.FullLoader)
         config = utils.try_get(d, lambda x: x['config']) or {}
         config_rclone = utils.try_get(d, lambda x: x['rclone']) or {}
+        # TODO: Sort plugins by type. For now assuming all are status
+        config_plugins = utils.try_get(d, lambda x: x['plugins']) or {}
     # Configure logging
+    global log
     log = logging.getLogger('root')
     log_level = utils.try_get(config, lambda x: x['log_level'], str) or LOG_LEVEL_DEFAULT
     log.addHandler(utils.LoggingHandler())
@@ -167,15 +187,18 @@ if __name__ == '__main__':
     log.debug(f"general config: {config}")
     log.debug(f"rclone config: {config_rclone}")
 
-    stream_proc = multiprocessing.Process(target=streamers_watcher, args=(config, STREAMERS_FILE), name="StreamWatcher")
+    stream_proc = multiprocessing.Process(target=streamers_watcher, args=(config, STREAMERS_FILE, config_plugins),
+                                          name="StreamWatcher")
     stream_proc.start()
 
     if not args.disable_rclone:
         # Start the rclone process
         # I originally had the idea to run this through cron, but was easy to implement it into the script
         # Also do we want an is_alive() checker here to restart the rclone process if it ever crashes?
-        rclone_delay = utils.try_get(config_rclone, lambda x: x['sleep_interval'], expected_type=int) or RCLONE_PROCESS_REPEAT_TIME
-        rclone_proc = multiprocessing.Process(target=rclone.rclone_watcher, args=(config_rclone, STREAMERS_FILE, rclone_delay), name="rcloneWatcher")
+        rclone_delay = utils.try_get(config_rclone, lambda x: x['sleep_interval'],
+                                     expected_type=int) or RCLONE_PROCESS_REPEAT_TIME
+        rclone_proc = multiprocessing.Process(target=rclone.rclone_watcher,
+                                              args=(config_rclone, STREAMERS_FILE, rclone_delay), name="rcloneWatcher")
         rclone_proc.start()
 
     stream_proc.join()
