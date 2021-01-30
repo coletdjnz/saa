@@ -135,7 +135,7 @@ class StreamArchiver:
         # Remove any non-json lines (e.g warnings from plugins)
         filtered = []
         for line in stdout_.split("\n"):
-            if "[plugin." in line or line == "":
+            if "[plugin" in line or line == "":
                 continue
             filtered.append(line)
 
