@@ -133,6 +133,7 @@ class StreamArchiver:
             return False
 
         # Remove any non-json lines (e.g warnings from plugins)
+        # Future improvement: could have this try removing lines till json loads correctly.
         filtered = []
         for line in stdout_.split("\n"):
             if "[plugin" in line or line == "":
