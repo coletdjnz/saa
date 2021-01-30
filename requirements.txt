@@ -1,6 +1,6 @@
 certifi
 chardet
-idna
+idna < 3
 iso-639
 iso3166
 isodate
