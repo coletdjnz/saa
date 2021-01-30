@@ -143,12 +143,12 @@ class StreamArchiver:
         # if no data after being filtered, then not sure why there isn't any data.
         if len(filtered) == 0:
             log.critical(
-                "No valid data returned from stderr or filtered stdout while trying to check if streamer is live"
-                " Please report this at https://gitlab.com/colethedj/stream_auto_archiver/-/issues."
-                "\nDebug information:"
-                f"\nstderr: {stderr_}"
-                f"\nstdout: {stdout_}"
-                f"\nstdout filtered: {' '.join(filtered)}")
+                f"""No valid data returned from stderr or filtered stdout while trying to check if streamer is live"
+                Please report this at https://gitlab.com/colethedj/stream_auto_archiver/-/issues."
+                Debug information:"
+                stderr: {stderr_}"
+                stdout: {stdout_}"
+                stdout filtered: {' '.join(filtered)}""")
             return False
 
         # parse as json
