@@ -1,3 +1,2 @@
-- Make default docker image not have the 429 patch (as I don't always have it up to date)
 - Better way of handling specific errors/warnings printed in stdout
 - Stream metadata retrieval (initial, continuous, final)

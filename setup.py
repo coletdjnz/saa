@@ -9,7 +9,7 @@ entry_points = {
 
 setup(
     name='saa',
-    version='20200725-dev',
+    version='20211130-dev',
     author='colethedj',
     author_email='colethedj@protonmail.com',
     packages=['saa', 'saa.plugins', 'saa.plugins.reporting'],

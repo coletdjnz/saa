@@ -27,7 +27,6 @@ I recommended using docker as that is how I have designed this program to work, 
 
 There are two Dockerfiles: 
  - [Dockerfile](Dockerfile) is the default. 
- - [Dockerfile-slpatch](Dockerfile-slpatch) contains optional patches for Streamlink from [streamlink-saa-patches](https://gitlab.com/colethedj/streamlink-saa-patches) repository.
 
 Clone this repository:
 

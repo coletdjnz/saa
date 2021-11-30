@@ -1,5 +1,8 @@
 # Changelog
 
+##### 2021.11.30
+- remove patches dockerfile since they are no longer needed/do not work
+
 ##### 2020.07.25
 - Basic plugin implementation. For now there are only Reporting Plugins. 
 - Reporting plugins: 
