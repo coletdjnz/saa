@@ -1,5 +1,8 @@
 # Changelog
 
+##### 2022.07.25
+- Migrate repository to GitHub
+
 ##### 2021.11.30
 - remove patches dockerfile since they are no longer needed/do not work
 

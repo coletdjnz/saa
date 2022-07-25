@@ -1,4 +1,6 @@
-# Stream Auto Archiver (saa)
+# Stream Auto Archiver (SAA)
+
+**This project is in a maintenance-only state.**
 
 Automatically archive ongoing livestreams.
 
@@ -30,7 +32,7 @@ There are two Dockerfiles:
 
 Clone this repository:
 
-    git clone https://gitlab.com/colethedj/stream_auto_archiver.git && cd saa
+    git clone https://github.com/coletdjnz/saa.git && cd saa
     
 Build the docker image
     
@@ -71,7 +73,7 @@ Requires Python 3.7+
 
 Clone this repository:
 
-    git clone https://gitlab.com/colethedj/stream_auto_archiver.git && cd saa
+    git clone https://github.com/coletdjnz/saa.git && cd saa
 
 (Optional, but recommended) - Create Python virtual environment:
 
@@ -137,14 +139,6 @@ plugins:
       ssl: False
       verify_ssl: False
 ```
-
-
-
-## TODO & CHANGELOG
-
-View [TODO.md](TODO.md)
-
-View [CHANGELOG.md](CHANGELOG.md)
 
 
 

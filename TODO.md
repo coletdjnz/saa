@@ -1,2 +1,0 @@
-- Better way of handling specific errors/warnings printed in stdout
-- Stream metadata retrieval (initial, continuous, final)

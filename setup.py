@@ -9,9 +9,9 @@ entry_points = {
 
 setup(
     name='saa',
-    version='20211130-dev',
-    author='colethedj',
-    author_email='colethedj@protonmail.com',
+    version='20220725',
+    author='coletdjnz',
+    author_email='coletdjnz@protonmail.com',
     packages=['saa', 'saa.plugins', 'saa.plugins.reporting'],
     entry_points=entry_points,
     license='LICENSE.txt',
