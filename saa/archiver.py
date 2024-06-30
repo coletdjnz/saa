@@ -41,7 +41,9 @@ class StreamArchiver:
                  streamlink_bin=STREAMLINK_BINARY,
                  make_dirs=True,
                  quality=STREAM_DEFAULT_QUALITY,
-                 com_queue=None, *args, **kwargs):
+                 com_queue=None,
+                 recheck_channel_interval=RECHECK_CHANNEL_STATUS_TIME,
+                 *args, **kwargs):
 
         self.url = str(url)
         self.split_time = int(split_time)
@@ -77,6 +79,8 @@ class StreamArchiver:
         # External reporting communication (for reporting plugins)
         self.__master_reporting_queue = com_queue
         self.__reporting_thread = None
+
+        self._recheck_interval = recheck_channel_interval or RECHECK_CHANNEL_STATUS_TIME
 
     @staticmethod
     def _start_streamlink_process(stream_url, file: str, quality=STREAM_DEFAULT_QUALITY, optional_sl_args=None,
@@ -423,7 +427,7 @@ class StreamArchiver:
                 self.__current_chunks = 0
                 self.__stream_start_time = None
 
-            time.sleep(RECHECK_CHANNEL_STATUS_TIME)
+            time.sleep(self._recheck_interval)
 
     def _display_config(self):
 

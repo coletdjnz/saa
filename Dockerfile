@@ -12,7 +12,7 @@ RUN apk update && \
     libc-dev \
     git \
     gcc && \
-    pip3 install -r /saa/requirements.txt -U && \
+    pip3 install -r /saa/requirements.txt -U --break-system-packages && \
     wget https://downloads.rclone.org/rclone-current-linux-amd64.zip && \
     unzip rclone-current-linux-amd64.zip && \
     cd rclone-*-linux-amd64 && \
@@ -21,7 +21,7 @@ RUN apk update && \
     rm rclone-current-linux-amd64.zip && \
     rclone --version && \
     cd /saa && \
-    pip3 install . && \
+    pip3 install . --break-system-packages && \
     cd / && \
     rm -rf /saa
 

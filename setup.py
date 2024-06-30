@@ -9,7 +9,7 @@ entry_points = {
 
 setup(
     name='saa',
-    version='20220725',
+    version='20240630',
     author='coletdjnz',
     author_email='coletdjnz@protonmail.com',
     packages=['saa', 'saa.plugins', 'saa.plugins.reporting'],
@@ -18,5 +18,5 @@ setup(
     description='Stream Auto Archiver - Automatically archive livestreams',
     long_description=open('README.md').read(),
     install_requires=requirements,
-    python_requires='>=3.7',
+    python_requires='>=3.8',
 )
